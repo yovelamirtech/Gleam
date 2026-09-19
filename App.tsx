@@ -1,13 +1,16 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import MobileAds from 'react-native-google-mobile-ads';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { BackgroundMusic } from './src/audio/BackgroundMusic';
 import { FpsOverlay } from './src/components/FpsOverlay';
 import { DEV_TOOLS_ENABLED } from './src/constants/devTools';
 import { DevToolsProvider, useDevTools } from './src/hooks/useDevTools';
+import { PurchasesProvider } from './src/hooks/usePurchases';
 import { SettingsProvider } from './src/hooks/useSettings';
 import type { RootStackParamList } from './src/navigation/types';
 import BoardRoute from './src/screens/BoardRoute';
@@ -31,10 +34,15 @@ function DevFpsOverlay() {
 }
 
 export default function App() {
+  useEffect(() => {
+    MobileAds().initialize();
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <SettingsProvider>
+          <PurchasesProvider>
           <DevToolsProvider>
             <BackgroundMusic />
             <NavigationContainer>
@@ -70,6 +78,7 @@ export default function App() {
             </NavigationContainer>
             <DevFpsOverlay />
           </DevToolsProvider>
+          </PurchasesProvider>
         </SettingsProvider>
         <StatusBar style="dark" />
       </SafeAreaProvider>

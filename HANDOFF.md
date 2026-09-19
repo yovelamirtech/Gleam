@@ -97,11 +97,74 @@ technical writeup of each:
     `__tests__/devTools.test.tsx` and new cases in `session.test.ts`/
     `progress.test.ts`; not seen on an actual screen.
 
+12. **Ads and monetization** — `react-native-google-mobile-ads` (banner +
+    interstitial) and `expo-iap` (the one-time "remove ads" purchase; not
+    `expo-in-app-purchases`, which is deprecated, and not the bare
+    `react-native-iap` package, which its own README says explicitly not to
+    use under Expo - `expo-iap` is the Expo-flavoured wrapper around the same
+    OpenIAP client). **Both are native modules** - see "Before you can build
+    a dev client" below, this is the biggest infrastructure change in the
+    project so far. `src/constants/ads.ts` holds the ad unit IDs (Google's
+    own public test IDs for now, see that file), `src/iap/constants.ts` the
+    one product SKU (`remove_ads`). `src/hooks/usePurchases.tsx`
+    (`PurchasesProvider`/`usePurchases`) tracks ownership: reconciles against
+    the store on connect via `getAvailablePurchases`, listens for a live
+    purchase through `useIAP`'s `onPurchaseSuccess`, and caches the result
+    locally (`src/storage/purchases.ts`) so ads stay off on every future
+    launch before that store connection resolves - the cache is
+    write-only-to-true, it can never turn ads back on, only the store can
+    revoke a purchase. `src/ads/BannerAdBox.tsx` (shown at the bottom of
+    `LevelsScreen` and `BoardsScreen`, not the board screen itself - didn't
+    want it competing with the painting canvas) and
+    `src/ads/LevelCompleteInterstitial.tsx` (non-visual, mounted in
+    `LevelCompleteScreen`, shows once per level completed - not per board,
+    that felt too frequent). `SettingsScreen` gained an "Ads" section: buy
+    button with the store's live price once fetched, and "Restore
+    purchases". Covered by `__tests__/purchases.test.tsx` and
+    `__tests__/ads.test.tsx` - found and fixed one real bug along the way
+    (see "Things worth knowing" below on the cache-vs-store race). Nothing
+    about ad rendering or the purchase sheet itself can be seen from a
+    remote container.
+
 All of the above is on branch `claude/affectionate-cannon-z4do8h`. PR #8
-(items 1-6) is merged into `main`; PR #9 (items 7-10) is open; item 11 is
+(items 1-6) is merged into `main`; PR #9 (items 7-11) is open; item 12 is
 this session's addition, not yet pushed to that PR when this note was
 last edited. `npm run typecheck` and `npm test` are both clean as of this
-file's last edit (191 tests).
+file's last edit (202 tests).
+
+## Before you can build a dev client
+
+Item 12 above pulled in `react-native-google-mobile-ads` and `expo-iap`,
+both native modules. **The plain Expo Go app can no longer run this
+project** - `npx expo start` needs a custom **Expo Dev Client** from here
+on. `eas.json` (new, this session) has a `development` build profile ready
+(`developmentClient: true`), but building it needs a few things only you
+can provide, since none of them exist yet:
+
+1. **An Expo/EAS account** linked to this project (`eas login`, then `eas
+   build:configure` sets `extra.eas.projectId` in `app.json` - not there
+   yet). EAS builds run in the cloud, so once this is set up you can
+   trigger a build and download the resulting `.apk`/`.ipa` straight from
+   your phone at expo.dev - no local machine needed.
+2. **`ios.bundleIdentifier` and `android.package`** in `app.json` - neither
+   is set. These are permanent app identifiers (can't casually change
+   later, and the store listings will be built around them), so this
+   session left them for you to choose rather than guessing something like
+   `com.yourstudio.gleam`.
+3. **A real AdMob account** (App ID + ad unit IDs) - `app.json`'s
+   `react-native-google-mobile-ads` plugin config and
+   `src/constants/ads.ts` both currently hold Google's own published *test*
+   IDs, which is safe to build and even publish with (they just show
+   Google's test creative instead of real ads), but obviously earn nothing
+   until swapped for real ones.
+4. **The `remove_ads` in-app product**, created with that exact ID in both
+   App Store Connect and the Google Play Console, before a real purchase
+   (as opposed to a Play/TestFlight sandbox one) can succeed.
+
+None of this blocks running the test suite or `npm run typecheck`, and
+none of it blocks continuing to other BUILD_PLAN.md items in the
+meantime - it only blocks actually installing a build on a phone from this
+point forward.
 
 ## On-device checklist
 
@@ -149,6 +212,17 @@ through together once a device is available rather than repeating
   sensibly at all four size options on a real screen width. None of this
   ships to players (`DEV_TOOLS_ENABLED` is `false` in any release build),
   so it's low priority relative to everything else on this list.
+- **Ads and IAP, all of it** — nothing here can be verified from a remote
+  container at all, and it needs an actual dev-client build first (see
+  "Before you can build a dev client" above), not just a device: does the
+  banner's adaptive height look right at the bottom of `LevelsScreen`/
+  `BoardsScreen` (`src/ads/BannerAdBox.tsx`) without shifting the grid
+  awkwardly; does the interstitial's timing after a level completes feel
+  right or too abrupt (`src/ads/LevelCompleteInterstitial.tsx`); does the
+  real store purchase sheet for `remove_ads` work end to end once the
+  product exists in App Store Connect/Play Console (test purchases only
+  until then); does "Restore purchases" in `SettingsScreen` actually find a
+  prior purchase after a reinstall.
 
 ## Next up, in BUILD_PLAN.md order
 
@@ -165,11 +239,9 @@ through together once a device is available rather than repeating
 2. ~~**Restyle the in-game stones to match the icon**~~ done — see "Done"
    item 7 above.
 3. ~~**Onboarding overlay**~~ done — see "Done" item 9 above.
-4. **Ads & monetization** (AdMob banner + interstitial, one-time IAP to
-   remove both) — nothing built yet. Needs its own research pass on
-   current Expo-compatible libraries (`AGENTS.md`'s warning about Expo v57
-   API drift applies especially here — training data may know an older,
-   now-wrong integration path for AdMob under Expo).
+4. ~~**Ads & monetization**~~ done — see "Done" item 12 above. Blocked from
+   actually being tested on a device until the account/identifier setup in
+   "Before you can build a dev client" above happens.
 5. ~~**Sound and music**~~ done — see "Done" item 10 above. Didn't end up
    looking at how the sibling apps wired `expo-audio`/`expo-haptics`
    (HANDOFF.md's earlier note here suggested that) — this session's read
@@ -211,6 +283,20 @@ through together once a device is available rather than repeating
   in-game stone restyle (item 2 above) also needs a couple of passes
   against real screenshots/feedback rather than getting it right blind
   from a text description.
+- **A real race in `usePurchases`, caught by its own test, not by inspection**
+  — the local "ads removed" cache and the live store both call
+  `setAdsRemoved`, and they resolve at different times. The first version
+  set the cached value unconditionally on load; if the store's own
+  `onPurchaseSuccess`/`getAvailablePurchases` reconciliation fired first
+  (plausible - the cache read goes through `AsyncStorage`, itself async)
+  and the cache turned out to be a stale `false` (e.g. the write from a
+  *previous* purchase hadn't landed yet, or this is a fresh install after a
+  restore), the cache's `then` would fire second and flip `adsRemoved` back
+  to `false` right after the store had just confirmed it `true`. Fixed by
+  making the cache read one-directional - `if (cached) setAdsRemoved(true)`,
+  never `setAdsRemoved(cached)` - so it can only ever turn ads off sooner,
+  never back on. `__tests__/purchases.test.tsx`'s "picks up a purchase
+  already owned" test failed against the original code before this fix.
 - **Nothing here has been run on a real device or simulator** this whole
   build (remote container, no attached device) — see "On-device checklist"
   above for the running list of what to verify once one is available.

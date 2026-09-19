@@ -7,6 +7,7 @@ import SettingsRow from '../components/SettingsRow';
 import SettingsSection from '../components/SettingsSection';
 import Toggle from '../components/Toggle';
 import { DEV_TOOLS_ENABLED } from '../constants/devTools';
+import { usePurchases } from '../hooks/usePurchases';
 import { useSettings } from '../hooks/useSettings';
 import type { RootStackParamList } from '../navigation/types';
 import { resetProgress } from '../storage/progress';
@@ -16,6 +17,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
 export default function SettingsScreen({ navigation }: Props) {
   const { settings, updateSettings } = useSettings();
+  const { adsRemoved, removeAdsPrice, buyRemoveAds, restore } = usePurchases();
   const insets = useSafeAreaInsets();
 
   function handleResetProgress() {
@@ -65,6 +67,19 @@ export default function SettingsScreen({ navigation }: Props) {
               />
             }
           />
+        </SettingsSection>
+
+        <SettingsSection title="Ads">
+          {adsRemoved ? (
+            <SettingsRow label="Ads removed" right={<Text style={styles.value}>✓</Text>} />
+          ) : (
+            <SettingsRow
+              label="Remove ads"
+              onPress={buyRemoveAds}
+              right={<Text style={styles.value}>{removeAdsPrice ?? '…'}</Text>}
+            />
+          )}
+          {!adsRemoved && <SettingsRow label="Restore purchases" onPress={restore} />}
         </SettingsSection>
 
         <SettingsSection title="About">
