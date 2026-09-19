@@ -2,14 +2,26 @@ import { Skia, type SkCanvas, type SkPaint } from '@shopify/react-native-skia';
 
 import { darken, lighten } from './colors';
 
+// Up-left, matching the fixed light source everywhere else in the app
+// (the same source `tools/app-icon/make-icons.mjs`'s `rhinestone()` uses).
+const LIGHT_X = -Math.SQRT1_2;
+const LIGHT_Y = -Math.SQRT1_2;
+
+// The icon uses 12 facets, sized for a ~350px hero. At CELL=24 a wedge would
+// be a couple of pixels wide, so this stays at 8: fewer, flat-shaded draw
+// calls per stone while still reading as faceted rather than domed. See
+// HANDOFF.md's "Restyle the in-game stones" note.
+const WEDGES = 8;
+
 /**
- * Draw one faux-3D diamond stone.
+ * Draw one faceted round rhinestone, matching the app icon's shape language
+ * (a ring of trapezoid facets around a small flat centre "table") instead of
+ * the earlier rounded-square-with-gradient stone.
  *
- * Gradient light-to-dark along a fixed top-left light source, a small specular
- * highlight and a soft bottom shadow — enough to read as raised without a 3D
- * engine, and cheap enough to repeat 1600 times per board. The light source
- * never moves (no gyroscope) and there is no ambient sparkle, both per
- * BUILD_PLAN.md.
+ * Each facet is a flat shade picked by its angle against the fixed top-left
+ * light source, no shader — cheap enough to repeat up to 1600 times per
+ * board redraw. The light source never moves (no gyroscope) and there is no
+ * ambient sparkle, both per BUILD_PLAN.md.
  */
 export function drawStone(
   canvas: SkCanvas,
@@ -19,55 +31,81 @@ export function drawStone(
   hex: string,
   opacity = 1
 ): void {
-  const inset = size * 0.08;
-  const left = x + inset;
-  const top = y + inset;
-  const side = size - inset * 2;
-  const radius = side * 0.22;
-  const rect = Skia.XYWHRect(left, top, side, side);
-  const rrect = Skia.RRectXY(rect, radius, radius);
+  const cx = x + size / 2;
+  const cy = y + size / 2;
+  const r = size * 0.42;
+  const innerR = r * 0.34;
 
   // Contact shadow, just under the stone.
   const shadow = Skia.Paint();
   shadow.setAntiAlias(true);
   shadow.setColor(Skia.Color('#0f172a'));
   shadow.setAlphaf(0.16 * opacity);
-  canvas.drawRRect(
-    Skia.RRectXY(Skia.XYWHRect(left, top + side * 0.1, side, side), radius, radius),
-    shadow
-  );
+  canvas.drawOval(Skia.XYWHRect(cx - r * 0.85, cy + r * 0.92, r * 1.7, r * 0.32), shadow);
 
-  // Body: light at the top-left corner, dark at the opposite one.
-  const body = Skia.Paint();
-  body.setAntiAlias(true);
-  body.setAlphaf(opacity);
-  body.setShader(
-    Skia.Shader.MakeLinearGradient(
-      { x: left, y: top },
-      { x: left + side, y: top + side },
-      [Skia.Color(lighten(hex, 0.45)), Skia.Color(hex), Skia.Color(darken(hex, 0.35))],
-      [0, 0.55, 1],
-      0 // TileMode.Clamp
-    )
-  );
-  canvas.drawRRect(rrect, body);
+  const point = (radius: number, angle: number) => ({
+    x: cx + radius * Math.cos(angle),
+    y: cy + radius * Math.sin(angle),
+  });
 
-  // Facet line across the middle, so the stone reads as cut rather than domed.
+  const edgeColor = darken(hex, 0.5);
+  const edge = Skia.Paint();
+  edge.setAntiAlias(true);
+  edge.setColor(Skia.Color(edgeColor));
+  edge.setAlphaf(opacity);
+  edge.setStyle(1); // PaintStyle.Stroke
+  edge.setStrokeWidth(Math.max(r * 0.06, 0.5));
+  edge.setStrokeJoin(1); // StrokeJoin.Round
+
   const facet = Skia.Paint();
   facet.setAntiAlias(true);
-  facet.setColor(Skia.Color(lighten(hex, 0.25)));
-  facet.setAlphaf(0.55 * opacity);
-  facet.setStyle(1); // PaintStyle.Stroke
-  facet.setStrokeWidth(Math.max(side * 0.05, 0.5));
-  canvas.drawLine(left + side * 0.18, top + side * 0.82, left + side * 0.82, top + side * 0.18, facet);
+  facet.setAlphaf(opacity);
 
-  // Specular highlight near the light source.
+  for (let i = 0; i < WEDGES; i += 1) {
+    const start = (i / WEDGES) * Math.PI * 2 - Math.PI / 2;
+    const end = ((i + 1) / WEDGES) * Math.PI * 2 - Math.PI / 2;
+    const mid = (start + end) / 2;
+    // -1 (facing the light) .. 1 (facing away), remapped to a shade.
+    const facing = -(Math.cos(mid) * LIGHT_X + Math.sin(mid) * LIGHT_Y);
+    const shade = facing < 0 ? lighten(hex, -facing * 0.55) : darken(hex, facing * 0.5);
+
+    const path = Skia.Path.Make();
+    const inStart = point(innerR, start);
+    const outStart = point(r, start);
+    const outEnd = point(r, end);
+    const inEnd = point(innerR, end);
+    path.moveTo(inStart.x, inStart.y);
+    path.lineTo(outStart.x, outStart.y);
+    path.lineTo(outEnd.x, outEnd.y);
+    path.lineTo(inEnd.x, inEnd.y);
+    path.close();
+
+    facet.setColor(Skia.Color(shade));
+    canvas.drawPath(path, facet);
+    canvas.drawPath(path, edge);
+  }
+
+  // Flat centre "table".
+  const table = Skia.Paint();
+  table.setAntiAlias(true);
+  table.setColor(Skia.Color(lighten(hex, 0.68)));
+  table.setAlphaf(opacity);
+  canvas.drawCircle(cx, cy, innerR, table);
+  canvas.drawCircle(cx, cy, innerR, edge);
+
+  // Specular arc near the light source.
   const highlight = Skia.Paint();
   highlight.setAntiAlias(true);
   highlight.setColor(Skia.Color('#ffffff'));
-  highlight.setAlphaf(0.7 * opacity);
-  canvas.drawOval(
-    Skia.XYWHRect(left + side * 0.16, top + side * 0.14, side * 0.26, side * 0.2),
+  highlight.setAlphaf(0.55 * opacity);
+  highlight.setStyle(1); // PaintStyle.Stroke
+  highlight.setStrokeWidth(Math.max(r * 0.1, 0.5));
+  highlight.setStrokeCap(1); // StrokeCap.Round
+  canvas.drawArc(
+    Skia.XYWHRect(cx - r * 0.97, cy - r * 0.97, r * 1.94, r * 1.94),
+    -167,
+    50,
+    false,
     highlight
   );
 }

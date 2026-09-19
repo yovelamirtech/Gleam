@@ -30,9 +30,7 @@ technical writeup of each:
    `tools/app-icon/`. **Went through 3 designs** based on live feedback;
    the current one (a round faceted rhinestone, 12 trapezoid facets around
    a centre "table", shaded by the app's fixed top-left light source) is
-   the one the user confirmed. See "Next up" below — the user wants the
-   in-game stones restyled to match this, and hasn't asked for the icon
-   itself to change again.
+   the one the user confirmed.
 6. **Level-complete celebration** — `LevelCompleteScreen` +
    `src/game/levelReplay.ts`: zoom out to the whole picture, a one-off
    sparkle sweep, every stone vanishing newest-first then reappearing
@@ -42,10 +40,16 @@ technical writeup of each:
    (`__tests__/levelReplay.test.ts`) is covered. The plan's "light
    zoom-in" during the vanish step (BUILD_PLAN.md, step 3) isn't
    implemented — only vanish/reappear themselves are.
+7. **In-game stones restyled to match the icon** — `src/ui/drawStone.ts`
+   now draws the same faceted-rhinestone shape as the app icon (8 wedges
+   instead of the icon's 12, for cell-scale draw-call cost). See "Next up"
+   below — not profiled on a real device yet.
 
-All of the above is on branch `claude/laughing-clarke-url4me`, in one
-open PR (yovelamirtech/Gleam#8, currently draft). `npm run typecheck` and
-`npm test` are both clean as of this file's last edit (167+ tests).
+All of the above is on branch `claude/affectionate-cannon-z4do8h`
+(PR #8, covering items 1-6, is merged into `main`; item 7 is this
+session's addition, not yet in its own PR when this note was last
+edited). `npm run typecheck` and `npm test` are both clean as of this
+file's last edit (167+ tests).
 
 ## Next up, in BUILD_PLAN.md order
 
@@ -54,34 +58,28 @@ open PR (yovelamirtech/Gleam#8, currently draft). `npm run typecheck` and
    said they'll upload the studio logo file "later" (session where this
    file was written) — check with them before starting this, don't invent
    a placeholder logo. The game's own "Tap to Start" symbol can reuse the
-   app-icon rhinestone (see `tools/app-icon/`) once the stone restyle below
-   lands, so it doesn't visually contradict the in-game look.
-2. **Restyle the in-game stones to match the icon** — the user's own
-   words: *"תעדכן את איך נראות אבני המשחק למשהו יותר כמו בלוגו"* ("update
-   how the game's stones look to something more like the logo"). Right now
-   `src/ui/drawStone.ts` draws a stone as a rounded square with a linear
-   gradient, one diagonal facet line and an oval highlight — the *first*
-   icon design's language, which the user rejected for not looking enough
-   like a real diamond-painting rhinestone (see `tools/app-icon/README.md`
-   and the git history of `tools/app-icon/make-icons.mjs` for the two
-   rejected designs and the accepted one). The icon now in
-   `tools/app-icon/make-icons.mjs`'s `rhinestone()` function — a circle of
-   12 trapezoid facets radiating from a small flat centre circle, each a
-   flat shade (not a gradient) picked by that facet's angle against the
-   fixed top-left light source — is the shape language to bring into
-   `drawStone.ts`. The hard part isn't the geometry (it's the same
-   angle-vs-light-source shading `rhinestone()` already does, just at
-   board-cell scale) but performance: a board redraws up to 1600 stones
-   per frame during a placement animation and `BoardCanvas.tsx` already
-   notes stones are cheap only because they're baked into one Skia
-   `Picture`; 12 polygons per stone instead of today's one rounded rect +
-   one line + one oval is roughly 5-10x the draw calls per stone. Profile
-   on a real device before assuming that's fine, and consider fewer wedges
-   (6-8?) at cell scale, where the icon's 12 is overkill anyway once cells
-   are ~24px. `LevelCompleteCanvas.tsx` deliberately draws flat colour
-   *without* the stone treatment because gradients/facets don't read at
-   that zoom (320x240 cells on one screen) — that reasoning doesn't change
-   just because `drawStone.ts` gets restyled, so leave it alone.
+   app-icon rhinestone (see `tools/app-icon/`) — now that the in-game
+   stone restyle (item 2 below) has landed, it won't visually contradict
+   the in-game look.
+2. ~~**Restyle the in-game stones to match the icon**~~ done —
+   `src/ui/drawStone.ts` now draws the same shape language as
+   `tools/app-icon/make-icons.mjs`'s `rhinestone()`: a ring of trapezoid
+   facets around a small flat centre "table", each a flat shade (no
+   gradient) picked by its angle against the fixed top-left light source,
+   plus a specular arc instead of the old oval highlight. Uses 8 wedges
+   instead of the icon's 12 — at `CELL = 24` a 12-wedge stone's facets
+   would be a couple of pixels wide, so 8 keeps it reading as faceted
+   while cutting draw calls per stone (`Skia.Path` + fill + stroke per
+   facet, drawn `WEDGES` times instead of the old one rect + one line +
+   one oval). `LevelCompleteCanvas.tsx` is untouched on purpose — it still
+   draws flat colour without the stone treatment, since facets don't read
+   at that zoom (320x240 cells on one screen). **Not profiled on a real
+   device** — `npm test`/`npm run typecheck` are clean, but nobody has
+   checked frame rate with ~8x the draw calls per stone during a
+   placement animation with up to 1600 stones on screen. If it stutters,
+   dropping to 6 wedges is the next lever (see the git history of this
+   file's earlier note for the reasoning), before considering baking
+   stone shapes into a shared `SkPicture`/image cache.
 3. **Onboarding overlay** — first-visit tap targets on the board screen,
    shown once (AsyncStorage flag), skippable. Nothing built yet.
 4. **Ads & monetization** (AdMob banner + interstitial, one-time IAP to
