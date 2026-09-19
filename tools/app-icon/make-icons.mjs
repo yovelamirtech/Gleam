@@ -23,44 +23,53 @@ const ADAPTIVE_BG = '#E6F4FE';
 const ACCENT = '#4C9AFF';
 
 /**
- * One faceted diamond: a kite outline split into four triangular facets by
- * its two diagonals, each a flat, distinct shade (not one smooth gradient —
- * a diamond reads as *cut* because neighbouring facets contrast, the way the
- * board's own stones don't need to at this size). Light source fixed at the
- * top-left, same as the rest of the app: that facet is near-white, the
- * opposite one the darkest.
+ * One faceted round rhinestone, like the flat-backed stones diamond painting
+ * actually uses: a ring of trapezoid facets radiating from a small flat
+ * centre ("table"), not a pointed side-view diamond. Each facet is a flat,
+ * distinct shade rather than one smooth gradient — a cut stone reads as
+ * faceted through contrast between neighbours, the way the board's own
+ * stones don't need to at this size. Shade comes from a fixed top-left light
+ * source, same as the rest of the app: facets facing it are near-white,
+ * the ones facing away are darkest.
  */
-function diamond({ cx, cy, width, height, silhouette = false, silhouetteColor = '#ffffff' }) {
-  const hw = width / 2;
-  const top = { x: cx, y: cy - height / 2 };
-  const bottom = { x: cx, y: cy + height / 2 };
-  // The girdle (widest point) sits a bit above vertical centre, like a real
-  // brilliant cut's crown being shorter than its pavilion.
-  const girdleY = cy - height * 0.08;
-  const left = { x: cx - hw, y: girdleY };
-  const right = { x: cx + hw, y: girdleY };
-  const centre = { x: cx, y: girdleY };
-
-  const poly = (...pts) => pts.map((p) => `${p.x},${p.y}`).join(' ');
-
+function rhinestone({ cx, cy, r, silhouette = false, silhouetteColor = '#ffffff' }) {
   if (silhouette) {
-    return `<polygon points="${poly(top, right, bottom, left)}" fill="${silhouetteColor}" />`;
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${silhouetteColor}" />`;
   }
 
-  const facets = [
-    { pts: [top, left, centre], fill: lighten(ACCENT, 0.62) }, // top-left: brightest, nearest the light
-    { pts: [top, centre, right], fill: lighten(ACCENT, 0.18) }, // top-right
-    { pts: [left, bottom, centre], fill: ACCENT }, // bottom-left
-    { pts: [centre, bottom, right], fill: darken(ACCENT, 0.42) }, // bottom-right: darkest, furthest from the light
-  ];
-  const edge = darken(ACCENT, 0.55);
-  const shadowRy = height * 0.06;
+  const wedges = 12;
+  const innerR = r * 0.34;
+  const point = (radius, angle) => ({ x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+  const poly = (...pts) => pts.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
+
+  // Up-left, matching the fixed light source everywhere else in the app.
+  const lightX = -Math.SQRT1_2;
+  const lightY = -Math.SQRT1_2;
+
+  const edge = darken(ACCENT, 0.5);
+  const strokeWidth = Math.max(r * 0.03, 1);
+
+  const facets = [];
+  for (let i = 0; i < wedges; i += 1) {
+    const start = (i / wedges) * Math.PI * 2 - Math.PI / 2;
+    const end = ((i + 1) / wedges) * Math.PI * 2 - Math.PI / 2;
+    const mid = (start + end) / 2;
+    // -1 (facing the light) .. 1 (facing away), remapped to a shade.
+    const facing = -(Math.cos(mid) * lightX + Math.sin(mid) * lightY);
+    const shade =
+      facing < 0 ? lighten(ACCENT, (-facing) * 0.55) : darken(ACCENT, facing * 0.5);
+    facets.push(
+      `<polygon points="${poly(point(innerR, start), point(r, start), point(r, end), point(innerR, end))}" fill="${shade}" stroke="${edge}" stroke-width="${strokeWidth}" stroke-linejoin="round" />`
+    );
+  }
 
   return `
-    <ellipse cx="${cx}" cy="${bottom.y + shadowRy * 0.6}" rx="${width * 0.42}" ry="${shadowRy}" fill="#0f172a" opacity="0.18" />
-    ${facets
-      .map((f) => `<polygon points="${poly(...f.pts)}" fill="${f.fill}" stroke="${edge}" stroke-width="${Math.max(width * 0.012, 1)}" stroke-linejoin="round" />`)
-      .join('\n    ')}
+    <ellipse cx="${cx}" cy="${cy + r * 1.08}" rx="${r * 0.85}" ry="${r * 0.16}" fill="#0f172a" opacity="0.16" />
+    ${facets.join('\n    ')}
+    <circle cx="${cx}" cy="${cy}" r="${innerR}" fill="${lighten(ACCENT, 0.68)}" stroke="${edge}" stroke-width="${strokeWidth}" />
+    <path d="M ${point(r * 0.97, -Math.PI * 0.92).x.toFixed(2)} ${point(r * 0.97, -Math.PI * 0.92).y.toFixed(2)}
+             A ${r * 0.97} ${r * 0.97} 0 0 1 ${point(r * 0.97, -Math.PI * 0.42).x.toFixed(2)} ${point(r * 0.97, -Math.PI * 0.42).y.toFixed(2)}"
+          fill="none" stroke="#ffffff" stroke-width="${r * 0.05}" stroke-linecap="round" opacity="0.55" />
   `;
 }
 
@@ -82,11 +91,10 @@ function sparkle({ cx, cy, r, color = '#ffffff', opacity = 0.95 }) {
 }
 
 function hero({ cx, cy, scale, silhouette = false }) {
-  const width = scale;
-  const height = scale * 1.2;
+  const r = scale * 0.6;
   return `
-    ${diamond({ cx, cy, width, height, silhouette, silhouetteColor: '#ffffff' })}
-    ${sparkle({ cx: cx + width * 0.42, cy: cy - height * 0.46, r: scale * 0.09, color: silhouette ? '#ffffff' : '#ffffff', opacity: silhouette ? 1 : 0.9 })}
+    ${rhinestone({ cx, cy, r, silhouette, silhouetteColor: '#ffffff' })}
+    ${sparkle({ cx: cx + r * 0.86, cy: cy - r * 0.86, r: scale * 0.11, color: '#ffffff', opacity: silhouette ? 1 : 0.9 })}
   `;
 }
 
