@@ -27,11 +27,20 @@ export default function BoardRoute({ navigation, route }: Props) {
 
   const handleComplete = useCallback(() => {
     loadProgress()
-      .then((progress) => saveProgress(markBoardCompleted(progress, levelId, boardId)))
+      .then((progress) => {
+        const wasLevelComplete = progress.levels[levelId]?.status === 'completed';
+        const next = markBoardCompleted(progress, levelId, boardId);
+        return saveProgress(next).then(() => {
+          const isLevelComplete = next.levels[levelId]?.status === 'completed';
+          if (!wasLevelComplete && isLevelComplete) {
+            navigation.replace('LevelComplete', { levelId });
+          }
+        });
+      })
       .catch(() => {
         // A failed write just means the unlock is re-derived next time progress loads.
       });
-  }, [levelId, boardId]);
+  }, [levelId, boardId, navigation]);
 
   return (
     <BoardScreen board={board} onExit={() => navigation.goBack()} onComplete={handleComplete} />
