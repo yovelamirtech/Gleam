@@ -9,24 +9,42 @@ import { saveSettings, type Settings } from '../src/storage/settings';
 
 // Jest's asset transform resolves every static asset (any `require('*.wav')`)
 // to the same placeholder value, so a real per-source registry can't tell
-// click/row/board apart. `useGameSounds` calls `useAudioPlayer` exactly three
-// times, always in the same order (click, row, board), on every render - so
-// call-index-within-render stands in for "which sound" instead, stored as
-// the three latest instances (one per render is enough; the hooks that use
-// them only ever act on the current render's closures).
+// click/row/board apart. `useGameSounds` calls `useAudioPlayer` exactly six
+// times, always in the same order (4 click-pool players, then row, then
+// board), on every render - so call-index-within-render stands in for
+// "which sound" instead, stored as the six latest instances (one per render
+// is enough; the hooks that use them only ever act on the current render's
+// closures).
 type FakePlayer = { play: jest.Mock; seekTo: jest.Mock };
+const mockClickPoolSize = 4;
+const mockSlotCount = mockClickPoolSize + 2; // + row, board
 let mockCallCount = 0;
-const mockPlayers: [FakePlayer?, FakePlayer?, FakePlayer?] = [undefined, undefined, undefined];
+let mockPlayers: (FakePlayer | undefined)[] = new Array(mockSlotCount).fill(undefined);
 
 jest.mock('expo-audio', () => ({
   useAudioPlayer: () => {
-    const index = mockCallCount % 3;
+    const index = mockCallCount % mockSlotCount;
     mockCallCount += 1;
-    const player = { play: jest.fn(), seekTo: jest.fn() };
-    mockPlayers[index] = player;
-    return player;
+    // Persists across re-renders once created, matching the real
+    // useAudioPlayer's own per-call-site stability (a re-render doesn't get
+    // a new player unless the source changes) - the thing this hook's own
+    // memoization (see useGameSounds.ts) now relies on.
+    if (!mockPlayers[index]) {
+      mockPlayers[index] = { play: jest.fn(), seekTo: jest.fn() };
+    }
+    return mockPlayers[index]!;
   },
 }));
+
+function clickPlayers(): FakePlayer[] {
+  return mockPlayers.slice(0, mockClickPoolSize) as FakePlayer[];
+}
+function rowPlayer(): FakePlayer {
+  return mockPlayers[mockClickPoolSize] as FakePlayer;
+}
+function boardPlayer(): FakePlayer {
+  return mockPlayers[mockClickPoolSize + 1] as FakePlayer;
+}
 
 function wrapper({ children }: { children: React.ReactNode }) {
   return <SettingsProvider>{children}</SettingsProvider>;
@@ -56,7 +74,7 @@ async function renderSounds(expected: Settings) {
 describe('useGameSounds', () => {
   beforeEach(async () => {
     mockCallCount = 0;
-    mockPlayers[0] = mockPlayers[1] = mockPlayers[2] = undefined;
+    mockPlayers = new Array(mockSlotCount).fill(undefined);
     jest.clearAllMocks();
     await AsyncStorage.clear();
   });
@@ -66,10 +84,24 @@ describe('useGameSounds', () => {
     sounds.onStonePlaced();
 
     expect(Haptics.impactAsync).toHaveBeenCalledWith(Haptics.ImpactFeedbackStyle.Light);
-    const [click, row, board] = mockPlayers;
-    expect(click!.play).toHaveBeenCalled();
-    expect(row!.play).not.toHaveBeenCalled();
-    expect(board!.play).not.toHaveBeenCalled();
+    expect(clickPlayers()[0].play).toHaveBeenCalled();
+    expect(rowPlayer().play).not.toHaveBeenCalled();
+    expect(boardPlayer().play).not.toHaveBeenCalled();
+  });
+
+  it('cycles through the click pool round-robin, so rapid placements never race the same player', async () => {
+    const sounds = await renderSounds({ soundEnabled: true, musicEnabled: true });
+    const players = clickPlayers();
+
+    for (let i = 0; i < players.length; i += 1) sounds.onStonePlaced();
+
+    for (const player of players) {
+      expect(player.play).toHaveBeenCalledTimes(1);
+    }
+
+    // A fifth placement wraps back around to the first player.
+    sounds.onStonePlaced();
+    expect(players[0].play).toHaveBeenCalledTimes(2);
   });
 
   it('plays a distinct sound for a finished row and a finished board', async () => {
@@ -77,10 +109,9 @@ describe('useGameSounds', () => {
     sounds.onRowComplete();
     sounds.onBoardComplete();
 
-    const [click, row, board] = mockPlayers;
-    expect(click!.play).not.toHaveBeenCalled();
-    expect(row!.play).toHaveBeenCalled();
-    expect(board!.play).toHaveBeenCalled();
+    expect(clickPlayers().every((player) => !player.play.mock.calls.length)).toBe(true);
+    expect(rowPlayer().play).toHaveBeenCalled();
+    expect(boardPlayer().play).toHaveBeenCalled();
   });
 
   it('mutes sound effects when the setting is off, but never the haptic', async () => {
@@ -89,7 +120,6 @@ describe('useGameSounds', () => {
     sounds.onStonePlaced();
 
     expect(Haptics.impactAsync).toHaveBeenCalled();
-    const [click] = mockPlayers;
-    expect(click!.play).not.toHaveBeenCalled();
+    expect(clickPlayers()[0].play).not.toHaveBeenCalled();
   });
 });

@@ -65,10 +65,15 @@ function tone(freq, durationSeconds, { attack = 0.003, decay, amplitude = 1 } = 
   return out;
 }
 
-/** A stone landing: a quick, glassy tick. */
+/**
+ * A stone landing: a soft, low tap rather than a bright glassy tick - the
+ * original 1400/2800Hz version read as harsh at gameplay speed (user
+ * feedback: "need a gentler click"). Lower pitch, quieter, and a touch
+ * softer attack so it reads as a tap, not a ping.
+ */
 function makeClick() {
-  const fundamental = tone(1400, 0.09, { decay: 0.03, amplitude: 0.55 });
-  const partial = tone(2800, 0.09, { decay: 0.02, amplitude: 0.18 });
+  const fundamental = tone(950, 0.08, { attack: 0.004, decay: 0.022, amplitude: 0.38 });
+  const partial = tone(1900, 0.06, { attack: 0.004, decay: 0.014, amplitude: 0.1 });
   const samples = mix(
     [
       { samples: fundamental, at: 0 },

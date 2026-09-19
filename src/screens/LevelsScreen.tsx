@@ -46,7 +46,7 @@ export default function LevelsScreen({ navigation }: Props) {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 8 }]}>
           <View style={styles.header}>
             <View>
               <Text style={styles.title}>Levels</Text>

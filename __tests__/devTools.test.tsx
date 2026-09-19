@@ -16,6 +16,12 @@ jest.mock('../src/components/BoardCanvas', () => {
     ),
   };
 });
+jest.mock('../src/components/StoneIcon', () => {
+  const { View } = require('react-native');
+  return {
+    StoneIcon: (props: { hex: string; size: number }) => <View testID="stone-icon" {...props} />,
+  };
+});
 
 // 0 0
 // 1 1

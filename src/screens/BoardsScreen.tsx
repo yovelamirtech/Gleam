@@ -44,7 +44,7 @@ export default function BoardsScreen({ navigation, route }: Props) {
   const artworkScale = tileSize / PREVIEW_BOARD_PX;
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>{prepared?.name ?? `Level ${levelId + 1}`}</Text>

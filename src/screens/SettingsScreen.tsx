@@ -1,8 +1,11 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useAudioPlayer } from 'expo-audio';
+import * as Haptics from 'expo-haptics';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import appConfig from '../../app.json';
+import clickSound from '../../assets/sounds/click.wav';
 import SettingsRow from '../components/SettingsRow';
 import SettingsSection from '../components/SettingsSection';
 import Toggle from '../components/Toggle';
@@ -19,6 +22,18 @@ export default function SettingsScreen({ navigation }: Props) {
   const { settings, updateSettings } = useSettings();
   const { adsRemoved, removeAdsPrice, buyRemoveAds, restore } = usePurchases();
   const insets = useSafeAreaInsets();
+  // Deliberately not gated by settings.soundEnabled: this is the one sound
+  // that confirms a toggle just switched something on, so it needs to be
+  // audible even when what it's confirming is "sound was off, now it's on".
+  const confirmSound = useAudioPlayer(clickSound);
+
+  /** Feedback for turning a toggle on - nothing when turning one off. */
+  function confirmToggleOn(value: boolean) {
+    if (!value) return;
+    confirmSound.seekTo(0);
+    confirmSound.play();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }
 
   function handleResetProgress() {
     Alert.alert(
@@ -53,8 +68,12 @@ export default function SettingsScreen({ navigation }: Props) {
             label="Sound effects"
             right={
               <Toggle
+                testID="toggle-sound"
                 value={settings.soundEnabled}
-                onValueChange={(value) => updateSettings({ soundEnabled: value })}
+                onValueChange={(value) => {
+                  updateSettings({ soundEnabled: value });
+                  confirmToggleOn(value);
+                }}
               />
             }
           />
@@ -62,8 +81,12 @@ export default function SettingsScreen({ navigation }: Props) {
             label="Music"
             right={
               <Toggle
+                testID="toggle-music"
                 value={settings.musicEnabled}
-                onValueChange={(value) => updateSettings({ musicEnabled: value })}
+                onValueChange={(value) => {
+                  updateSettings({ musicEnabled: value });
+                  confirmToggleOn(value);
+                }}
               />
             }
           />

@@ -7,6 +7,7 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 // doesn't have, same reasoning as the Skia canvas mock in BoardScreen.test.tsx.
 jest.mock('expo-audio', () => ({
   useAudioPlayer: () => ({ play: jest.fn(), pause: jest.fn(), seekTo: jest.fn(), loop: false, volume: 1 }),
+  setAudioModeAsync: jest.fn(() => Promise.resolve()),
 }));
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(),

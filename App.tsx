@@ -1,6 +1,7 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useEffect } from 'react';
+import { setAudioModeAsync } from 'expo-audio';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -36,6 +37,11 @@ function DevFpsOverlay() {
 export default function App() {
   useEffect(() => {
     googleMobileAds?.default().initialize();
+    // Without this, iOS in particular can leave the app with no active audio
+    // session - music and sound effects both silently not playing - and the
+    // ring/silent switch mutes them outright. Also lets music and effects mix
+    // rather than cut each other off.
+    setAudioModeAsync({ playsInSilentMode: true, interruptionMode: 'mixWithOthers' });
   }, []);
 
   return (

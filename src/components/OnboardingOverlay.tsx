@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { LayoutRectangle, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '../ui/theme';
@@ -23,6 +23,15 @@ interface Props {
   steps: OnboardingStep[];
   /** Fired once, whether the sequence finished or was skipped. */
   onDone: () => void;
+  /**
+   * Bump this (any changing number, e.g. a counter) each time the player
+   * does the thing step 0 is pointing at - picks a colour - so the overlay
+   * advances on its own instead of waiting for an explicit "Next" tap.
+   * Ignored on every step but 0.
+   */
+  advanceFromStep0?: number;
+  /** Same idea for step 1 (lifting a strip out of the tray). Ignored elsewhere. */
+  advanceFromStep1?: number;
 }
 
 /**
@@ -34,7 +43,7 @@ interface Props {
  * Shown once ever, not per board — `src/storage/onboarding.ts` tracks that,
  * and the board screen only mounts this while it's false.
  */
-export function OnboardingOverlay({ steps, onDone }: Props) {
+export function OnboardingOverlay({ steps, onDone, advanceFromStep0, advanceFromStep1 }: Props) {
   const [index, setIndex] = useState(0);
   const step = steps[index];
   const isLast = index === steps.length - 1;
@@ -47,6 +56,25 @@ export function OnboardingOverlay({ steps, onDone }: Props) {
       setIndex(index + 1);
     }
   }
+
+  // Tracks the last-seen value of each signal so only a *change* advances,
+  // not the prop simply being passed on mount.
+  const seenStep0 = useRef(advanceFromStep0);
+  const seenStep1 = useRef(advanceFromStep1);
+  useEffect(() => {
+    if (index === 0 && advanceFromStep0 !== undefined && advanceFromStep0 !== seenStep0.current) {
+      seenStep0.current = advanceFromStep0;
+      advance();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [advanceFromStep0]);
+  useEffect(() => {
+    if (index === 1 && advanceFromStep1 !== undefined && advanceFromStep1 !== seenStep1.current) {
+      seenStep1.current = advanceFromStep1;
+      advance();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [advanceFromStep1]);
 
   const cardTop = Math.max(target.y - CARD_HEIGHT_ESTIMATE - CARD_GAP, 12);
 

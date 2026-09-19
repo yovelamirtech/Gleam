@@ -53,8 +53,16 @@ export function boardStatus(progress: Progress, levelId: number, boardId: number
   return boardId === centreBoardId() ? 'unlocked' : 'locked';
 }
 
+/**
+ * The board wall's actual centre tile, by row and column - not
+ * `floor(BOARDS_PER_LEVEL / 2)`, which for an 8-wide wall lands on the left
+ * edge of the middle row (id 24 = row 3, col 0) rather than anywhere near
+ * the middle column.
+ */
 export function centreBoardId(): number {
-  return Math.floor(BOARDS_PER_LEVEL / 2);
+  const col = Math.floor(BOARDS_X / 2);
+  const row = Math.floor(BOARDS_Y / 2);
+  return row * BOARDS_X + col;
 }
 
 export async function loadProgress(): Promise<Progress> {

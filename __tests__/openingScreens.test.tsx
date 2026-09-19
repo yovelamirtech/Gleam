@@ -4,6 +4,16 @@ import React from 'react';
 import SplashScreen from '../src/screens/SplashScreen';
 import TapToStartScreen from '../src/screens/TapToStartScreen';
 
+// TapToStartScreen's decorative sparkles are StoneIcon's, which need a
+// native Skia surface the test renderer doesn't have - same reasoning as
+// BoardScreen.test.tsx's mock.
+jest.mock('../src/components/StoneIcon', () => {
+  const { View } = require('react-native');
+  return {
+    StoneIcon: (props: { hex: string; size: number }) => <View testID="stone-icon" {...props} />,
+  };
+});
+
 // Both screens only ever call `replace`, so a real NavigationContainer isn't
 // needed - a stub with that one method is enough to observe where they send
 // the player next.

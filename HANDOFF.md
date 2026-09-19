@@ -126,11 +126,89 @@ technical writeup of each:
     about ad rendering or the purchase sheet itself can be seen from a
     remote container.
 
+13. **First real feedback pass, after a written description of every item
+    above** (no device, still - the user described what they saw and
+    wanted from screenshots/memory, not a live test). Scoped to the
+    clearly-bounded fixes only; the one big architectural ask (see "Next
+    up" item 8 below) was deliberately deferred to its own round rather
+    than folded in here:
+    - **`centreBoardId()`** (`src/storage/progress.ts`) computed
+      `floor(BOARDS_PER_LEVEL / 2)` = 24, which for an 8-wide wall is the
+      left edge of the middle row, not the middle column. Fixed to use
+      real row/col math (id 28).
+    - **Airborne strip could be silently destroyed** by touching the tray
+      again while stones were still hanging in the air (e.g. reaching to
+      grab another one) - `trayTouched`/`trayDragged` in
+      `BoardScreen.tsx` now ignore a fresh tray touch while
+      `session.airborneStrip` is non-null, instead of starting a new lift
+      that overwrote it.
+    - **Rotation pivoted around the strip's first stone**, not its centre
+      - `src/ui/airborneRotation.ts` (a new, independently unit-tested
+      pure function) computes the offset needed to keep the centre fixed;
+      `BoardScreen`'s `rotateStones` applies it to `stripX`/`stripY`.
+    - **The airborne strip's visual position and its drop target used to
+      be the same point**, so the "ghost" preview on the board sat
+      exactly under the floating stones with no sense of hovering. Split
+      into two offsets (`CARRY_OFFSET_Y` for the target, a new
+      `CARRY_VISUAL_LIFT` on top of it purely for where the strip
+      renders) plus a heavier drop shadow (`AirborneStrip.tsx`). Not
+      checked on a real screen for feel.
+    - **Tray and airborne stones looked like plain rounded squares**, not
+      the faceted rhinestone the board itself uses. New
+      `src/components/StoneIcon.tsx` (a small `drawStone` on its own tiny
+      Skia canvas) replaces the old plain `View` rendering in both
+      `HudTray.tsx` and `AirborneStrip.tsx`.
+    - **Onboarding now advances itself** when the player actually does
+      what the current step is pointing at (picks a colour; lifts a
+      strip out of the tray), not only on an explicit "Next"/"Got it"
+      tap - two new optional props on `OnboardingOverlay`
+      (`advanceFromStep0`/`advanceFromStep1`, "bump this counter to
+      advance") that `BoardScreen` feeds from the real interactions.
+    - **A real audio bug**: `setAudioModeAsync` was never called anywhere
+      in the app - the very plausible reason background music was never
+      heard (iOS in particular needs an active session configured, and
+      respects the ring/silent switch without one). Added to `App.tsx`.
+    - **The click sound was inconsistent under rapid placements** - one
+      shared player got `seekTo(0)` + `play()` called on it faster than
+      those settled, racing with itself. `useGameSounds.ts` now cycles
+      through a 4-player pool for clicks specifically (row/board fire
+      rarely enough not to need it). Also re-synthesized the click itself
+      to be lower-pitched and quieter (`tools/sound-gen/make-sounds.mjs`)
+      per "too harsh" feedback.
+    - **Settings toggles now confirm with a sound + light haptic when
+      switched on** (never when switched off) - direct, ungated
+      `useAudioPlayer`/`Haptics` calls in `SettingsScreen.tsx`, since the
+      whole point is confirming "sound was off, now it's on" even while
+      sound is (was) off.
+    - **`SplashScreen`** now fades the wordmark in (650ms) and back out
+      (550ms) on a plain white field instead of a hard cut, and
+      **`TapToStartScreen`** got a few decorative `StoneIcon`s and a soft
+      glow behind the game icon instead of a bare icon+text screen.
+    - **`LevelsScreen`/`BoardsScreen` were missing top safe-area padding**
+      - their headers could sit under the status bar/notch/Dynamic
+      Island. Both now add `insets.top`, matching every other screen.
+    - **Dev tools**: a new "Instantly finish level X and preview its
+      complete screen" row solves every one of a level's 48 boards for
+      real (not a blank shell) and marks it complete on the walls too,
+      so `LevelCompleteScreen` can actually be previewed without playing
+      a full level - the user specifically asked for this.
+    - **Not done this round, deliberately deferred**: a landing animation
+      when stones are placed (asked for, but risked being a bigger,
+      riskier rendering change than the rest of this list combined - see
+      "Next up" below); the "why is there no number telling me what
+      colour goes where" complaint, which the user's own bigger ask (item
+      8 below) folds into anyway once the whole picture is always
+      visible and zoomable.
+    Covered by new/extended tests: `__tests__/progress.test.ts`,
+    `__tests__/BoardScreen.test.tsx`, `__tests__/airborneRotation.test.ts`
+    (new), `__tests__/onboarding.test.tsx`, `__tests__/gameSounds.test.tsx`,
+    `__tests__/settingsScreen.test.tsx` (new),
+    `__tests__/devToolsScreen.test.tsx` (new), `__tests__/openingScreens.test.tsx`.
+
 All of the above is on branch `claude/affectionate-cannon-z4do8h`. PR #8
-(items 1-6) is merged into `main`; PR #9 (items 7-11) is open; item 12 is
-this session's addition, not yet pushed to that PR when this note was
-last edited. `npm run typecheck` and `npm test` are both clean as of this
-file's last edit (205 tests).
+(items 1-6) is merged into `main`; PR #9 (items 7-13) is open. `npm run
+typecheck` and `npm test` are both clean as of this file's last edit
+(218 tests).
 
 ## Ads/IAP and plain Expo Go
 
@@ -205,11 +283,25 @@ still open, gathered here in one place per the user's request, to go
 through together once a device is available rather than repeating
 "not checked on a real device" scattered through this file:
 
-- **Splash duration and layout** — is 1.4s the right beat before
-  `SplashScreen` moves on; does `wordmark.png` read at the right size and
-  position across phone sizes (`src/screens/SplashScreen.tsx`).
+- **Splash fade timing and layout** — is the 650ms fade-in/500ms hold/550ms
+  fade-out beat right before `SplashScreen` moves on; does `wordmark.png`
+  read at the right size and position across phone sizes
+  (`src/screens/SplashScreen.tsx`).
 - **Tap-to-start layout** — does the icon/title/prompt sizing and spacing
-  look right (`src/screens/TapToStartScreen.tsx`).
+  look right, and do the new decorative `StoneIcon` sparkles and glow read
+  as intentional rather than cluttered at real phone sizes
+  (`src/screens/TapToStartScreen.tsx`).
+- **This round's board-screen fixes, all unverified on a real screen**:
+  does the airborne strip's new extra hover height
+  (`CARRY_VISUAL_LIFT`) actually read as "floating above the board" or
+  does it now feel too far from the finger; does the heavier drop shadow
+  help or look odd; does rotating a strip around its centre feel natural;
+  does `StoneIcon` (the tray/airborne stones' own tiny Skia canvas) look
+  right and render fast enough at `AIRBORNE_STONE` (30px) and `TRAY_SLOT`
+  (40px) sizes - it's a second Skia canvas per visible stone, on top of
+  the board's own, and hasn't been profiled (`src/components/StoneIcon.tsx`,
+  `src/screens/BoardScreen.tsx`, `src/components/HudTray.tsx`,
+  `src/components/AirborneStrip.tsx`).
 - **Onboarding overlay** — does the dim/spotlight band actually land on
   the colour row and tray row on a real layout (the estimate in
   `OnboardingOverlay`'s `CARD_HEIGHT_ESTIMATE` could be off for a longer
@@ -227,11 +319,15 @@ through together once a device is available rather than repeating
 - **Sound/music/haptics, all of it** — nothing about audio can be verified
   from a remote container: whether the four placeholder sounds
   (`assets/sounds/*.wav`, `tools/sound-gen/`) are actually audible at a
-  sane volume, whether the background pad's loop point is truly seamless
-  in practice (not just zero-crossing on paper), whether the click sound
-  can be heard distinctly over rapid placements, and whether the light
-  haptic (`Haptics.ImpactFeedbackStyle.Light`) feels right. Also: these
-  are synthesized placeholders standing in for real sound design (see
+  sane volume (the missing `setAudioModeAsync` call was fixed this round -
+  see "Done" item 13 - but that was diagnosed from reading the code, not
+  from hearing it work), whether the background pad's loop point is truly
+  seamless in practice (not just zero-crossing on paper), whether the
+  retuned, pooled click sound now reads as "gentle" and distinct over
+  rapid placements the way the user asked for, and whether the light
+  haptic (`Haptics.ImpactFeedbackStyle.Light`) - on both the game itself
+  and the new settings-toggle confirmation - feels right. Also: these are
+  synthesized placeholders standing in for real sound design (see
   `tools/sound-gen/README.md`) — expect the user to want them replaced
   once heard, same as the app icon and stone restyle both took a few
   rounds.
@@ -284,6 +380,29 @@ through together once a device is available rather than repeating
    (`src/constants/board.ts`), only 7 levels are prepared. The user
    provides source images; run `tools/prep-images` on them the same way
    PR #6 did.
+8. **The big one, explicitly deferred to its own round (user's own
+   choice)**: replace board-by-board and level-by-level navigation with
+   one continuous, freely zoomable/pannable canvas at each layer -
+   inside a level, the player should always be "inside" the whole
+   picture (all 48 boards visibly stitched together, only separated by a
+   thin line) rather than entering one board screen at a time; the
+   levels wall should work the same way (one giant wall of every level's
+   artwork, only the centre one unlocked, free pan/zoom to browse
+   without paging). This is not a small change - it touches navigation
+   (no more separate `Boards`/`Board` routes, or they change meaning),
+   the viewport/gesture code (`src/ui/viewport.ts` currently zooms/pans
+   one 40x40 board, not a 320x240 whole-level canvas), and rendering
+   performance is the real risk: the user *also* asked "how do we make
+   performance better, because a full board is already getting hard to
+   run" in the same message - and this change means rendering far more
+   than one board at once, the opposite direction from what that request
+   wants unless it's done carefully (tiled/virtualized rendering, only
+   drawing what's on screen, something closer to what
+   `LevelCompleteCanvas` already does at flattened/low fidelity for the
+   celebration screen). Read that whole feedback message again before
+   starting - it has the exact wording of what's wanted. No design or
+   architecture decisions have been made yet; this needs its own
+   planning pass, not just diving into code.
 
 ## Things worth knowing that aren't obvious from the code alone
 

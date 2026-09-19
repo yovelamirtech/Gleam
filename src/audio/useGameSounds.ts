@@ -1,11 +1,21 @@
 import { useAudioPlayer, type AudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 
 import boardSound from '../../assets/sounds/board.wav';
 import clickSound from '../../assets/sounds/click.wav';
 import rowSound from '../../assets/sounds/row.wav';
 import { useSettings } from '../hooks/useSettings';
+
+/**
+ * How many overlapping instances of the click sound to keep ready. Placing
+ * stones quickly can trigger it faster than one player's own seek-and-replay
+ * round trip settles, so a single shared player made playback inconsistent
+ * under rapid taps - restarting a still-playing instance every time raced
+ * with itself. Cycling through a small pool instead means every click gets
+ * its own, never-currently-playing player.
+ */
+const CLICK_POOL_SIZE = 4;
 
 export interface GameSounds {
   /** A stone lands on the board. Always haptic; sound gated by settings. */
@@ -24,7 +34,14 @@ export interface GameSounds {
  */
 export function useGameSounds(): GameSounds {
   const { settings } = useSettings();
-  const clickPlayer = useAudioPlayer(clickSound);
+  // Fixed count, same order every render - safe to call in a loop's place.
+  const clickPlayers: AudioPlayer[] = [
+    useAudioPlayer(clickSound),
+    useAudioPlayer(clickSound),
+    useAudioPlayer(clickSound),
+    useAudioPlayer(clickSound),
+  ];
+  const nextClickPlayer = useRef(0);
   const rowPlayer = useAudioPlayer(rowSound);
   const boardPlayer = useAudioPlayer(boardSound);
 
@@ -40,9 +57,15 @@ export function useGameSounds(): GameSounds {
   );
 
   const onStonePlaced = useCallback(() => {
-    play(clickPlayer);
+    const player = clickPlayers[nextClickPlayer.current];
+    nextClickPlayer.current = (nextClickPlayer.current + 1) % clickPlayers.length;
+    play(player);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, [play, clickPlayer]);
+    // clickPlayers is rebuilt fresh every render (a new array from the fixed
+    // set of hook calls above), so depending on its contents rather than its
+    // identity would rebuild this callback every render for no reason.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [play]);
 
   const onRowComplete = useCallback(() => play(rowPlayer), [play, rowPlayer]);
   const onBoardComplete = useCallback(() => play(boardPlayer), [play, boardPlayer]);

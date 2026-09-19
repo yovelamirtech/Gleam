@@ -7,9 +7,12 @@ import SettingsRow from '../components/SettingsRow';
 import SettingsSection from '../components/SettingsSection';
 import Toggle from '../components/Toggle';
 import { BOARDS_PER_LEVEL, LEVEL_COUNT } from '../constants/board';
+import { preparedLevelFor } from '../game/levels';
+import { saveBoardProgress } from '../game/persistence';
+import { BoardSession } from '../game/session';
 import { useDevTools } from '../hooks/useDevTools';
 import type { RootStackParamList } from '../navigation/types';
-import { loadProgress, resetProgress, saveProgress, unlockAll } from '../storage/progress';
+import { loadProgress, markBoardCompleted, resetProgress, saveProgress, unlockAll } from '../storage/progress';
 import { colors } from '../theme/colors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DevTools'>;
@@ -63,6 +66,30 @@ export default function DevToolsScreen({ navigation }: Props) {
     Alert.alert('Unlocked', 'Every level and board is now reachable.');
   }
 
+  /**
+   * The level-complete celebration is otherwise only reachable by actually
+   * finishing all 48 boards of a level. This instantly solves every one of
+   * them (real artwork, not a blank shell) and marks the level complete on
+   * the walls too, so `LevelCompleteScreen` has real placement data to
+   * replay - not just a quick nav shortcut to an empty screen.
+   */
+  async function handlePreviewLevelComplete() {
+    const prepared = preparedLevelFor(levelId);
+    if (!prepared) {
+      Alert.alert('No artwork yet', `Level ${levelId + 1} has no prepared source image.`);
+      return;
+    }
+    let progress = await loadProgress();
+    for (let board = 0; board < BOARDS_PER_LEVEL; board += 1) {
+      const session = new BoardSession(prepared.getBoard(board));
+      session.completeInstantly();
+      await saveBoardProgress(session.toProgress());
+      progress = markBoardCompleted(progress, levelId, board);
+    }
+    await saveProgress(progress);
+    navigation.navigate('LevelComplete', { levelId });
+  }
+
   function handleResetProgress() {
     Alert.alert(
       'Reset progress',
@@ -102,6 +129,10 @@ export default function DevToolsScreen({ navigation }: Props) {
           <SettingsRow
             label={`Go to level ${levelId + 1}, board ${boardId + 1}`}
             onPress={() => navigation.navigate('Board', { levelId, boardId })}
+          />
+          <SettingsRow
+            label={`Instantly finish level ${levelId + 1} and preview its complete screen`}
+            onPress={handlePreviewLevelComplete}
           />
         </SettingsSection>
 

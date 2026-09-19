@@ -7,6 +7,15 @@ import {
   unlockAll,
 } from '../src/storage/progress';
 
+describe('centreBoardId', () => {
+  it('is the wall\'s actual middle tile, not floor(BOARDS_PER_LEVEL / 2)', () => {
+    // 8 wide, 6 tall: the true centre is row 3, col 4 (id 28) - floor(48/2)
+    // is 24, which is row 3 col 0, the left edge of the same row.
+    expect(centreBoardId()).toBe(3 * BOARDS_X + 4);
+    expect(centreBoardId()).not.toBe(Math.floor(BOARDS_PER_LEVEL / 2));
+  });
+});
+
 describe('markBoardCompleted', () => {
   it('completes the board and unlocks its four neighbours', () => {
     // Row 2, col 4 of the 8x6 wall: interior, so all four neighbours exist.
