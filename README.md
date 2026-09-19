@@ -51,7 +51,8 @@ src/
     placeholderBoard.ts    generated board data, until levels are loaded
     persistence.ts         AsyncStorage save/load of one board's progress
     replay.ts              ordering for the level-complete redraw
-    levels/sampleLagoon.ts  the one prepared level, read out of assets/levels/
+    levels/                one module per prepared level, read out of assets/levels/,
+                            plus index.ts, the levelId -> level registry
   ui/                    drawing and layout helpers
     drawStone.ts           faux-3D stone: gradient, facet, highlight, shadow
     viewport.ts            pan/zoom maths, canvas <-> cell conversion
@@ -75,15 +76,18 @@ strip of one to five stones, stones that stay in the air until they land
 somewhere legal, tap to rotate, pan and pinch, exact stone supply, and the
 placement order kept for the level-complete replay.
 
-The levels screen and the 8x6 board grid around it are placeholders that
-navigate but carry no artwork.
+The levels screen and the 8x6 board grid around it now show real artwork for
+every level that has been prepared: the level's `preview.png` on its tile, and
+the matching crop of it on each of its boards. A level past the end of
+`src/game/levels/index.ts`'s registry still falls back to a plain numbered
+tile, since it has no source image yet.
 
-The two seams where the three strands meet are closed for the one level that
-has prepared art:
+The two seams where the three strands meet are closed for the levels that
+have prepared art:
 
-- `src/screens/BoardRoute.tsx` reads level 0 out of `assets/levels/sample-lagoon`
-  (`src/game/levels/sampleLagoon.ts`); every other level id still falls back to
-  a generated placeholder board until its own source image is prepared.
+- `src/screens/BoardRoute.tsx` looks up `levelId` in `src/game/levels/index.ts`;
+  a level with no entry there still falls back to a generated placeholder
+  board until its own source image is prepared.
 - Finishing a board calls `markBoardCompleted` in `src/storage/progress.ts`,
   which unlocks the boards touching it, and unlocks the neighbouring levels
   once every board in a level is done.

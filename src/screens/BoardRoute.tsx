@@ -1,20 +1,13 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useMemo } from 'react';
 
-import { getSampleLagoonBoard } from '../game/levels/sampleLagoon';
+import { preparedLevelFor } from '../game/levels';
 import { createPlaceholderBoard } from '../game/placeholderBoard';
 import type { RootStackParamList } from '../navigation/types';
 import { loadProgress, markBoardCompleted, saveProgress } from '../storage/progress';
 import BoardScreen from './BoardScreen';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Board'>;
-
-/**
- * Level 0 is the only level with prepared art so far (`assets/levels/sample-lagoon`);
- * every other level id still falls back to a generated placeholder board until
- * its own source image is prepared.
- */
-const PREPARED_LEVEL_IDS = new Set([0]);
 
 /**
  * Adapter between the navigation stack and the board screen.
@@ -25,13 +18,12 @@ const PREPARED_LEVEL_IDS = new Set([0]);
  */
 export default function BoardRoute({ navigation, route }: Props) {
   const { levelId, boardId } = route.params;
-  const board = useMemo(
-    () =>
-      PREPARED_LEVEL_IDS.has(levelId)
-        ? getSampleLagoonBoard(boardId)
-        : createPlaceholderBoard(boardId, { levelId: `level-${levelId + 1}` }),
-    [levelId, boardId]
-  );
+  const board = useMemo(() => {
+    const prepared = preparedLevelFor(levelId);
+    return prepared
+      ? prepared.getBoard(boardId)
+      : createPlaceholderBoard(boardId, { levelId: `level-${levelId + 1}` });
+  }, [levelId, boardId]);
 
   const handleComplete = useCallback(() => {
     loadProgress()
