@@ -1,4 +1,4 @@
-import { TRAY_SLOTS, cellIndex, otherOrientation, stripCells } from './geometry';
+import { TRAY_SLOTS, cellIndex, cellRow, otherOrientation, stripCells } from './geometry';
 import type {
   AirborneStrip,
   BoardData,
@@ -307,8 +307,31 @@ export class BoardSession {
     this.airborne = null;
     if (this.selection && this.remainingFor(this.selection.color) <= 0) this.selection = null;
 
+    const completedRows = this.rowsCompletedBy(cells);
+
     this.emit();
-    return { ok: true, placements };
+    return { ok: true, placements, completedRows };
+  }
+
+  /**
+   * Rows a just-placed strip finished off, for a "row complete" sound/haptic.
+   * Only checks the rows the new cells actually touch, not the whole board.
+   */
+  private rowsCompletedBy(cells: number[]): number[] {
+    const rows = new Set(cells.map((cell) => cellRow(cell, this.board.width)));
+    const completed: number[] = [];
+    for (const row of rows) {
+      let full = true;
+      const start = row * this.board.width;
+      for (let col = 0; col < this.board.width; col += 1) {
+        if (this.colorByCell[start + col] === -1) {
+          full = false;
+          break;
+        }
+      }
+      if (full) completed.push(row);
+    }
+    return completed;
   }
 
   // --- persistence --------------------------------------------------------

@@ -4,6 +4,8 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { BackgroundMusic } from './src/audio/BackgroundMusic';
+import { SettingsProvider } from './src/hooks/useSettings';
 import type { RootStackParamList } from './src/navigation/types';
 import BoardRoute from './src/screens/BoardRoute';
 import BoardsScreen from './src/screens/BoardsScreen';
@@ -20,31 +22,34 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <NavigationContainer>
-          <Stack.Navigator
-            initialRouteName="Splash"
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: colors.background },
-            }}
-          >
-            <Stack.Screen name="Splash" component={SplashScreen} options={{ gestureEnabled: false }} />
-            <Stack.Screen
-              name="TapToStart"
-              component={TapToStartScreen}
-              options={{ gestureEnabled: false }}
-            />
-            <Stack.Screen name="Levels" component={LevelsScreen} />
-            <Stack.Screen name="Boards" component={BoardsScreen} />
-            <Stack.Screen name="Board" component={BoardRoute} />
-            <Stack.Screen
-              name="LevelComplete"
-              component={LevelCompleteScreen}
-              options={{ gestureEnabled: false }}
-            />
-            <Stack.Screen name="Settings" component={SettingsScreen} options={{ presentation: 'modal' }} />
-          </Stack.Navigator>
-        </NavigationContainer>
+        <SettingsProvider>
+          <BackgroundMusic />
+          <NavigationContainer>
+            <Stack.Navigator
+              initialRouteName="Splash"
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: colors.background },
+              }}
+            >
+              <Stack.Screen name="Splash" component={SplashScreen} options={{ gestureEnabled: false }} />
+              <Stack.Screen
+                name="TapToStart"
+                component={TapToStartScreen}
+                options={{ gestureEnabled: false }}
+              />
+              <Stack.Screen name="Levels" component={LevelsScreen} />
+              <Stack.Screen name="Boards" component={BoardsScreen} />
+              <Stack.Screen name="Board" component={BoardRoute} />
+              <Stack.Screen
+                name="LevelComplete"
+                component={LevelCompleteScreen}
+                options={{ gestureEnabled: false }}
+              />
+              <Stack.Screen name="Settings" component={SettingsScreen} options={{ presentation: 'modal' }} />
+            </Stack.Navigator>
+          </NavigationContainer>
+        </SettingsProvider>
         <StatusBar style="dark" />
       </SafeAreaProvider>
     </GestureHandlerRootView>

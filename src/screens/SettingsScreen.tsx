@@ -1,5 +1,4 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -7,28 +6,16 @@ import appConfig from '../../app.json';
 import SettingsRow from '../components/SettingsRow';
 import SettingsSection from '../components/SettingsSection';
 import Toggle from '../components/Toggle';
+import { useSettings } from '../hooks/useSettings';
 import type { RootStackParamList } from '../navigation/types';
 import { resetProgress } from '../storage/progress';
-import { loadSettings, saveSettings, type Settings } from '../storage/settings';
 import { colors } from '../theme/colors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
-const DEFAULT_SETTINGS: Settings = { soundEnabled: true, musicEnabled: true };
-
 export default function SettingsScreen({ navigation }: Props) {
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const { settings, updateSettings } = useSettings();
   const insets = useSafeAreaInsets();
-
-  useEffect(() => {
-    loadSettings().then(setSettings);
-  }, []);
-
-  function update(patch: Partial<Settings>) {
-    const next = { ...settings, ...patch };
-    setSettings(next);
-    saveSettings(next);
-  }
 
   function handleResetProgress() {
     Alert.alert(
@@ -64,7 +51,7 @@ export default function SettingsScreen({ navigation }: Props) {
             right={
               <Toggle
                 value={settings.soundEnabled}
-                onValueChange={(value) => update({ soundEnabled: value })}
+                onValueChange={(value) => updateSettings({ soundEnabled: value })}
               />
             }
           />
@@ -73,7 +60,7 @@ export default function SettingsScreen({ navigation }: Props) {
             right={
               <Toggle
                 value={settings.musicEnabled}
-                onValueChange={(value) => update({ musicEnabled: value })}
+                onValueChange={(value) => updateSettings({ musicEnabled: value })}
               />
             }
           />

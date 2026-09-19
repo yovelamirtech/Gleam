@@ -4,6 +4,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useGameSounds } from '../audio/useGameSounds';
 import AirborneStripView, { AIRBORNE_STONE } from '../components/AirborneStrip';
 import { BoardCanvas, CELL, type DropPreview } from '../components/BoardCanvas';
 import ColorPicker from '../components/ColorPicker';
@@ -46,6 +47,7 @@ interface Props {
  */
 export function BoardScreen({ board, onExit, onComplete }: Props) {
   const { session, revision, ready } = useBoardSession(board);
+  const sounds = useGameSounds();
 
   /** Guards against firing onComplete again on every later revision. */
   const completedRef = useRef(false);
@@ -55,8 +57,11 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
   useEffect(() => {
     if (!completedRef.current && session.isComplete()) {
       completedRef.current = true;
+      sounds.onBoardComplete();
       onComplete?.();
     }
+    // sounds' identity changes with the settings toggle; only board completion should re-fire this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, revision, onComplete]);
 
   // First-run coach marks. `null` means "still checking storage" so the
@@ -216,9 +221,12 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
       setPreview(null);
       const head = headAt(headX, headY);
       if (!head) return;
-      session.place(head.row, head.col);
+      const result = session.place(head.row, head.col);
+      if (!result.ok) return;
+      sounds.onStonePlaced();
+      if (result.completedRows.length > 0) sounds.onRowComplete();
     },
-    [session, headAt]
+    [session, headAt, sounds]
   );
 
   /** Touching the tray takes one stone — or whichever stone is under the finger. */

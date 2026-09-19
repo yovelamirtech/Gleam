@@ -77,7 +77,7 @@ export type PlacementFailure =
   | 'wrong-color';
 
 export type PlaceResult =
-  | { ok: true; placements: Placement[] }
+  | { ok: true; placements: Placement[]; completedRows: number[] }
   | { ok: false; reason: PlacementFailure };
 
 /** Serialised board progress. Only the placements are stored; state is replayed from them. */

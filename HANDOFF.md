@@ -58,12 +58,34 @@ technical writeup of each:
    `__tests__/onboarding.test.tsx` covers the sequence, skip, and the
    AsyncStorage flag persisting across a remount; nothing about it has
    been seen on an actual screen.
+10. **Sound, music and haptics** — `expo-audio` + `expo-haptics`. A click
+    on every placed stone, a chime on every finished board row, a fanfare
+    on a finished board, a quiet looping ambient pad throughout, and a
+    light haptic on every placement (haptics has no settings toggle - the
+    plan lists none). `src/audio/useGameSounds.ts` (the three one-shots +
+    haptic, gated by `settings.soundEnabled`) and
+    `src/audio/BackgroundMusic.tsx` (the loop, gated by
+    `settings.musicEnabled`, mounted once at the `App.tsx` root so it
+    survives navigation). Both read from a new shared
+    `SettingsProvider`/`useSettings` (`src/hooks/useSettings.tsx`) that
+    replaces `SettingsScreen`'s old local `loadSettings()`/`saveSettings()`
+    calls, so toggling a setting takes effect immediately everywhere
+    instead of only on that screen's own state. "Row complete" didn't
+    exist as a concept before this - `BoardSession.place()` now returns
+    `completedRows: number[]` (`src/game/session.ts`), the board rows
+    (of the 40-wide grid) that placement's cells just finished off; tested
+    in `__tests__/session.test.ts`. **The four `assets/sounds/*.wav` files
+    are placeholders**, not real sound design - synthesized directly in
+    code by `tools/sound-gen/make-sounds.mjs` (a tick, two ascending
+    chimes, a four-note fanfare, and a seamlessly-looping ambient pad; see
+    that tool's README for how the loop avoids any click). Replace them
+    with produced audio whenever it's ready; nothing else needs to change.
 
 All of the above is on branch `claude/affectionate-cannon-z4do8h`. PR #8
-(items 1-6) and PR #9 (items 7-8) are merged into `main`; item 9 is this
+(items 1-6) and PR #9 (items 7-8) are merged into `main`; item 10 is this
 session's addition, not yet in its own PR when this note was last
 edited. `npm run typecheck` and `npm test` are both clean as of this
-file's last edit (174 tests).
+file's last edit (182 tests).
 
 ## On-device checklist
 
@@ -92,6 +114,17 @@ through together once a device is available rather than repeating
   vanish/reappear timing and frame rate; only the ordering logic is
   covered by tests (`src/screens/LevelCompleteScreen.tsx`,
   `src/game/levelReplay.ts`).
+- **Sound/music/haptics, all of it** — nothing about audio can be verified
+  from a remote container: whether the four placeholder sounds
+  (`assets/sounds/*.wav`, `tools/sound-gen/`) are actually audible at a
+  sane volume, whether the background pad's loop point is truly seamless
+  in practice (not just zero-crossing on paper), whether the click sound
+  can be heard distinctly over rapid placements, and whether the light
+  haptic (`Haptics.ImpactFeedbackStyle.Light`) feels right. Also: these
+  are synthesized placeholders standing in for real sound design (see
+  `tools/sound-gen/README.md`) — expect the user to want them replaced
+  once heard, same as the app icon and stone restyle both took a few
+  rounds.
 
 ## Next up, in BUILD_PLAN.md order
 
@@ -113,14 +146,12 @@ through together once a device is available rather than repeating
    current Expo-compatible libraries (`AGENTS.md`'s warning about Expo v57
    API drift applies especially here — training data may know an older,
    now-wrong integration path for AdMob under Expo).
-5. **Sound and music** — click/row/board-complete sounds, background
-   music, haptics on placement. `src/storage/settings.ts` already has the
-   on/off flags from the settings screen; nothing plays yet. Look at how
-   the sibling apps `yovelamirtech/letter-wheel` and
-   `yovelamirtech/bullseye-words` wired `expo-audio` and `expo-haptics`
-   (both used it, not the older `expo-av`) before building this from
-   scratch — same "style reference, not code to copy verbatim" spirit as
-   the settings screen.
+5. ~~**Sound and music**~~ done — see "Done" item 10 above. Didn't end up
+   looking at how the sibling apps wired `expo-audio`/`expo-haptics`
+   (HANDOFF.md's earlier note here suggested that) — this session's read
+   of the installed packages' own `.d.ts` files (empty README this SDK
+   version) was enough, and the two apps' actual wiring wasn't checked.
+   Worth a look if the on-device pass above turns up something odd.
 6. **Dev tools** — auto-unlock everything, jump to a specific board,
    instant-complete, solution overlay, FPS counter, free look at the
    faux-3D style. All gated behind one clear flag/menu per the plan so
