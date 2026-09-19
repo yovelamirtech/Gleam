@@ -5,7 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import type { RootStackParamList } from './src/navigation/types';
-import BoardScreen from './src/screens/BoardScreen';
+import BoardRoute from './src/screens/BoardRoute';
 import BoardsScreen from './src/screens/BoardsScreen';
 import LevelsScreen from './src/screens/LevelsScreen';
 import { colors } from './src/theme/colors';
@@ -25,7 +25,7 @@ export default function App() {
           >
             <Stack.Screen name="Levels" component={LevelsScreen} />
             <Stack.Screen name="Boards" component={BoardsScreen} />
-            <Stack.Screen name="Board" component={BoardScreen} />
+            <Stack.Screen name="Board" component={BoardRoute} />
           </Stack.Navigator>
         </NavigationContainer>
         <StatusBar style="dark" />
