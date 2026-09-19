@@ -24,7 +24,7 @@ export interface DropPreview {
 
 interface Props {
   session: BoardSession;
-  /** Changes whenever the session mutates, so the stone layer is redrawn. */
+  /** Changes whenever the session mutates, so the board re-renders with it. */
   revision: number;
   preview: DropPreview | null;
   width: number;
@@ -87,6 +87,9 @@ export function BoardCanvas({
     [board]
   );
 
+  // Keyed on the stone count, not the session revision: sizing a strip in the
+  // tray bumps the revision many times a second, and redrawing every stone on
+  // the board for that is work nobody asked for.
   const stonesPicture = useMemo(
     () =>
       createPicture((canvas) => {
@@ -97,7 +100,7 @@ export function BoardCanvas({
         }
       }, Skia.XYWHRect(0, 0, board.width * CELL, board.height * CELL)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [session, board, revision]
+    [session, board, session.stonesPlaced]
   );
 
   const previewPicture = useMemo(() => {

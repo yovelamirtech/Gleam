@@ -1,5 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import React from 'react';
+import { StyleSheet } from 'react-native';
+import { State } from 'react-native-gesture-handler';
+import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 
 import BoardScreen from '../src/screens/BoardScreen';
 
@@ -50,6 +53,13 @@ describe('BoardScreen', () => {
     expect(screen.queryByTestId('airborne-strip')).toBeNull();
   });
 
+  it('keeps the airborne gesture handler mounted before anything is lifted', async () => {
+    await renderBoard();
+    // Stones appear mid-drag. Attaching a gesture handler while another gesture
+    // is running takes the app down, so the empty strip has to be there already.
+    expect(screen.getByTestId('airborne-strip-empty')).toBeTruthy();
+  });
+
   it('takes one stone by default when a colour is picked', async () => {
     await renderBoard();
     fireEvent.press(screen.getByTestId('color-1'));
@@ -92,5 +102,118 @@ describe('BoardScreen', () => {
     expect(canvas.props.width).toBe(390);
     expect(canvas.props.height).toBe(600);
     expect(screen.getByTestId('exit-board')).toBeTruthy();
+  });
+});
+
+describe('dragging the tray', () => {
+  /**
+   * These drive the real pan handlers. A worklet that reaches across a module
+   * boundary crashes on a device the moment the drag starts, and the only way
+   * to catch that here is to actually run the gesture.
+   */
+  it('sizes the strip as the finger slides across the stones', async () => {
+    await renderBoard();
+    fireEvent.press(screen.getByTestId('color-1'));
+
+    fireGestureHandler(getByGestureTestId('tray-pan'), [
+      { state: State.BEGAN, x: 10, y: 20, absoluteX: 10, absoluteY: 700, translationY: 0 },
+      { state: State.ACTIVE, x: 40, y: 20, absoluteX: 40, absoluteY: 700, translationY: 0 },
+      { state: State.ACTIVE, x: 100, y: 20, absoluteX: 100, absoluteY: 700, translationY: 0 },
+      { state: State.END, x: 100, y: 20, absoluteX: 100, absoluteY: 700, translationY: 0 },
+    ]);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('tray-detail')).toHaveTextContent(/Taking 3 of 5/)
+    );
+    // A sideways swipe alone never lifts anything.
+    expect(screen.queryByTestId('airborne-strip')).toBeNull();
+  });
+
+  it('lifts the stones into the air on an upward pull', async () => {
+    await renderBoard();
+    fireEvent.press(screen.getByTestId('color-1'));
+
+    fireGestureHandler(getByGestureTestId('tray-pan'), [
+      { state: State.BEGAN, x: 55, y: 20, absoluteX: 55, absoluteY: 700, translationY: 0 },
+      { state: State.ACTIVE, x: 55, y: 20, absoluteX: 55, absoluteY: 700, translationY: 0 },
+      { state: State.ACTIVE, x: 55, y: -60, absoluteX: 55, absoluteY: 620, translationY: -80 },
+    ]);
+
+    await waitFor(() => expect(screen.getByTestId('airborne-strip')).toBeTruthy());
+  });
+
+  it('leaves the stones hanging where a drop did not fit', async () => {
+    await renderBoard();
+    fireEvent.press(screen.getByTestId('color-1'));
+
+    fireGestureHandler(getByGestureTestId('tray-pan'), [
+      { state: State.BEGAN, x: 55, y: 20, absoluteX: 55, absoluteY: 700, translationY: 0 },
+      { state: State.ACTIVE, x: 55, y: 20, absoluteX: 55, absoluteY: 700, translationY: 0 },
+      { state: State.ACTIVE, x: 55, y: -60, absoluteX: 55, absoluteY: 620, translationY: -80 },
+      // Released over the HUD, which is not the board.
+      { state: State.END, x: 55, y: -60, absoluteX: 55, absoluteY: 620, translationY: -80 },
+    ]);
+
+    await waitFor(() => expect(screen.getByTestId('airborne-strip')).toBeTruthy());
+    expect(screen.getByTestId('board-progress')).toHaveTextContent('0 / 12');
+  });
+
+  it('places nothing when the finger never pulled up', async () => {
+    await renderBoard();
+    fireEvent.press(screen.getByTestId('color-1'));
+
+    fireGestureHandler(getByGestureTestId('tray-pan'), [
+      { state: State.BEGAN, x: 10, y: 20, absoluteX: 10, absoluteY: 700, translationY: 0 },
+      { state: State.ACTIVE, x: 80, y: 22, absoluteX: 80, absoluteY: 702, translationY: 2 },
+      { state: State.ACTIVE, x: 200, y: 24, absoluteX: 200, absoluteY: 704, translationY: 4 },
+      { state: State.END, x: 200, y: 24, absoluteX: 200, absoluteY: 704, translationY: 4 },
+    ]);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('tray-detail')).toHaveTextContent(/Taking 5 of 5/)
+    );
+    expect(screen.queryByTestId('airborne-strip')).toBeNull();
+    expect(screen.getByTestId('board-progress')).toHaveTextContent('0 / 12');
+  });
+});
+
+/** Orientation the airborne stones are laid out in right now. */
+function airborneDirection(): string {
+  return StyleSheet.flatten(screen.getByTestId('airborne-strip').props.style).flexDirection;
+}
+
+describe('the stones in the air', () => {
+  async function lift() {
+    await renderBoard();
+    fireEvent.press(screen.getByTestId('color-1'));
+    fireGestureHandler(getByGestureTestId('tray-pan'), [
+      { state: State.BEGAN, x: 55, y: 20, absoluteX: 55, absoluteY: 700, translationY: 0 },
+      { state: State.ACTIVE, x: 55, y: 20, absoluteX: 55, absoluteY: 700, translationY: 0 },
+      { state: State.ACTIVE, x: 55, y: -60, absoluteX: 55, absoluteY: 620, translationY: -80 },
+      { state: State.END, x: 55, y: -60, absoluteX: 55, absoluteY: 620, translationY: -80 },
+    ]);
+    await waitFor(() => expect(screen.getByTestId('airborne-strip')).toBeTruthy());
+  }
+
+  it('can be dragged again without crashing', async () => {
+    await lift();
+    fireGestureHandler(getByGestureTestId('airborne-pan'), [
+      { state: State.BEGAN, changeX: 0, changeY: 0 },
+      { state: State.ACTIVE, changeX: -20, changeY: -40 },
+      { state: State.ACTIVE, changeX: -20, changeY: -40 },
+      { state: State.END, changeX: 0, changeY: 0 },
+    ]);
+    await waitFor(() => expect(screen.getByTestId('airborne-strip')).toBeTruthy());
+  });
+
+  it('rotates on a tap and stays in the air', async () => {
+    await lift();
+    expect(airborneDirection()).toBe('row');
+    fireGestureHandler(getByGestureTestId('airborne-tap'), [
+      { state: State.BEGAN },
+      { state: State.ACTIVE },
+      { state: State.END },
+    ]);
+    await waitFor(() => expect(airborneDirection()).toBe('column'));
   });
 });

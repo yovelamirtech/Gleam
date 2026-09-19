@@ -57,8 +57,17 @@ export function BoardScreen({ board, onExit }: Props) {
   /** Screen position of the airborne strip's head. */
   const stripX = useSharedValue(0);
   const stripY = useSharedValue(0);
-  /** 1 once a tray swipe has pulled the stones out of the tray. */
-  const lifted = useSharedValue(0);
+  /** True once a tray swipe has pulled the stones out of the tray. */
+  const lifted = useRef(false);
+  /** Last preview we pushed to React, so a drag does not re-render per pixel. */
+  const previewKey = useRef<string | null>(null);
+
+  // A worklet runs on the UI thread with only what it captured, and an imported
+  // binding compiles to a property read on a module object that does not
+  // survive that crossing. So the gesture worklets below close over plain local
+  // numbers and do every decision back on the JS thread.
+  const stoneHalf = AIRBORNE_STONE / 2;
+  const carryOffsetY = CARRY_OFFSET_Y;
 
   const bounds = useMemo<ViewportBounds>(
     () => ({
@@ -128,9 +137,17 @@ export function BoardScreen({ board, onExit }: Props) {
       const strip = session.airborneStrip;
       const head = strip ? headAt(headX, headY) : null;
       if (!strip || !head) {
-        setPreview(null);
+        if (previewKey.current !== null) {
+          previewKey.current = null;
+          setPreview(null);
+        }
         return;
       }
+      const valid = session.canPlace(head.row, head.col);
+      // A drag fires many times per cell; only redraw when the outcome changes.
+      const key = `${head.row}:${head.col}:${strip.count}:${strip.orientation}:${strip.color}:${valid}`;
+      if (previewKey.current === key) return;
+      previewKey.current = key;
       setPreview({
         row: head.row,
         col: head.col,
@@ -138,7 +155,7 @@ export function BoardScreen({ board, onExit }: Props) {
         orientation: strip.orientation,
         color: strip.color,
         hex: board.palette[strip.color].hex,
-        valid: session.canPlace(head.row, head.col),
+        valid,
       });
     },
     [session, board.palette, headAt]
@@ -151,6 +168,7 @@ export function BoardScreen({ board, onExit }: Props) {
    */
   const commitDrop = useCallback(
     (headX: number, headY: number) => {
+      previewKey.current = null;
       setPreview(null);
       const head = headAt(headX, headY);
       if (!head) return;
@@ -159,19 +177,42 @@ export function BoardScreen({ board, onExit }: Props) {
     [session, headAt]
   );
 
-  const setCountFromTrayX = useCallback(
+  /** Touching the tray takes one stone — or whichever stone is under the finger. */
+  const trayTouched = useCallback(
     (x: number) => {
+      lifted.current = false;
       session.setSelectionCount(countAtX(x, trayMetrics));
     },
     [session]
   );
 
-  const liftStones = useCallback(
-    (headX: number, headY: number) => {
-      if (!session.liftStrip(orientation.current)) return;
+  /**
+   * A tray drag: sideways sizes the strip, an upward pull lifts it out, and
+   * once it is out the stones follow the finger.
+   */
+  const trayDragged = useCallback(
+    (x: number, translationY: number, headX: number, headY: number) => {
+      if (!lifted.current) {
+        if (!shouldLift(translationY)) {
+          session.setSelectionCount(countAtX(x, trayMetrics));
+          return;
+        }
+        if (!session.liftStrip(orientation.current)) return;
+        lifted.current = true;
+      }
       updatePreview(headX, headY);
     },
     [session, updatePreview]
+  );
+
+  /** Letting go after a tray drag. A drag that never lifted places nothing. */
+  const trayReleased = useCallback(
+    (headX: number, headY: number) => {
+      if (!lifted.current) return;
+      lifted.current = false;
+      commitDrop(headX, headY);
+    },
+    [commitDrop]
   );
 
   const rotateStones = useCallback(() => {
@@ -184,40 +225,27 @@ export function BoardScreen({ board, onExit }: Props) {
   const trayGesture = useMemo(
     () =>
       Gesture.Pan()
+        .withTestId('tray-pan')
         .onBegin((event) => {
-          lifted.value = 0;
-          runOnJS(setCountFromTrayX)(event.x);
+          runOnJS(trayTouched)(event.x);
         })
         .onUpdate((event) => {
-          const headX = event.absoluteX - AIRBORNE_STONE / 2;
-          const headY = event.absoluteY - CARRY_OFFSET_Y;
-          if (lifted.value === 0) {
-            if (shouldLift(event.translationY)) {
-              lifted.value = 1;
-              stripX.value = headX;
-              stripY.value = headY;
-              runOnJS(liftStones)(headX, headY);
-            } else {
-              runOnJS(setCountFromTrayX)(event.x);
-            }
-            return;
-          }
+          // Keep the stones under the finger here, decide what that means in JS.
+          const headX = event.absoluteX - stoneHalf;
+          const headY = event.absoluteY - carryOffsetY;
           stripX.value = headX;
           stripY.value = headY;
-          runOnJS(updatePreview)(headX, headY);
+          runOnJS(trayDragged)(event.x, event.translationY, headX, headY);
         })
         .onEnd((event) => {
-          if (lifted.value === 0) return;
-          runOnJS(commitDrop)(event.absoluteX - AIRBORNE_STONE / 2, event.absoluteY - CARRY_OFFSET_Y);
-        })
-        .onFinalize(() => {
-          lifted.value = 0;
+          runOnJS(trayReleased)(event.absoluteX - stoneHalf, event.absoluteY - carryOffsetY);
         }),
-    [commitDrop, lifted, liftStones, setCountFromTrayX, stripX, stripY, updatePreview]
+    [carryOffsetY, stoneHalf, stripX, stripY, trayDragged, trayReleased, trayTouched]
   );
 
   const airborneGesture = useMemo(() => {
     const drag = Gesture.Pan()
+      .withTestId('airborne-pan')
       .onChange((event) => {
         stripX.value += event.changeX;
         stripY.value += event.changeY;
@@ -226,9 +254,11 @@ export function BoardScreen({ board, onExit }: Props) {
       .onEnd(() => {
         runOnJS(commitDrop)(stripX.value, stripY.value);
       });
-    const tap = Gesture.Tap().onEnd(() => {
-      runOnJS(rotateStones)();
-    });
+    const tap = Gesture.Tap()
+      .withTestId('airborne-tap')
+      .onEnd(() => {
+        runOnJS(rotateStones)();
+      });
     // A drag beats a tap, so carrying the stones never reads as a rotation.
     return Gesture.Exclusive(drag, tap);
   }, [commitDrop, rotateStones, stripX, stripY, updatePreview]);
