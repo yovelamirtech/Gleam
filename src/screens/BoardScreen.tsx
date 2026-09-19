@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue } from 'react-native-reanimated';
@@ -28,6 +28,8 @@ interface Props {
   board: BoardData;
   /** Back to the levels screen. The board keeps its progress. */
   onExit?: () => void;
+  /** Fired once, the moment every cell of the board gets its stone. */
+  onComplete?: () => void;
 }
 
 /**
@@ -40,8 +42,20 @@ interface Props {
  * a swipe-and-pull on the tray lifts stones into the air, and the airborne
  * stones carry their own drag and tap. Placing never fights with moving.
  */
-export function BoardScreen({ board, onExit }: Props) {
+export function BoardScreen({ board, onExit, onComplete }: Props) {
   const { session, revision, ready } = useBoardSession(board);
+
+  /** Guards against firing onComplete again on every later revision. */
+  const completedRef = useRef(false);
+  useEffect(() => {
+    completedRef.current = false;
+  }, [board.id]);
+  useEffect(() => {
+    if (!completedRef.current && session.isComplete()) {
+      completedRef.current = true;
+      onComplete?.();
+    }
+  }, [session, revision, onComplete]);
 
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const canvasRef = useRef<View>(null);

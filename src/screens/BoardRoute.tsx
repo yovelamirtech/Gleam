@@ -1,26 +1,47 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
+import { getSampleLagoonBoard } from '../game/levels/sampleLagoon';
 import { createPlaceholderBoard } from '../game/placeholderBoard';
 import type { RootStackParamList } from '../navigation/types';
+import { loadProgress, markBoardCompleted, saveProgress } from '../storage/progress';
 import BoardScreen from './BoardScreen';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Board'>;
 
 /**
+ * Level 0 is the only level with prepared art so far (`assets/levels/sample-lagoon`);
+ * every other level id still falls back to a generated placeholder board until
+ * its own source image is prepared.
+ */
+const PREPARED_LEVEL_IDS = new Set([0]);
+
+/**
  * Adapter between the navigation stack and the board screen.
  *
  * The board screen takes board data, not route params, so that it stays
- * testable without a navigator. This turns the route into that data. The board
- * is still generated rather than read from `assets/levels/`; loading the real
- * level JSON is the next step.
+ * testable without a navigator. This turns the route into that data, and
+ * turns a finished board into the unlock of its neighbours.
  */
 export default function BoardRoute({ navigation, route }: Props) {
   const { levelId, boardId } = route.params;
   const board = useMemo(
-    () => createPlaceholderBoard(boardId, { levelId: `level-${levelId + 1}` }),
+    () =>
+      PREPARED_LEVEL_IDS.has(levelId)
+        ? getSampleLagoonBoard(boardId)
+        : createPlaceholderBoard(boardId, { levelId: `level-${levelId + 1}` }),
     [levelId, boardId]
   );
 
-  return <BoardScreen board={board} onExit={() => navigation.goBack()} />;
+  const handleComplete = useCallback(() => {
+    loadProgress()
+      .then((progress) => saveProgress(markBoardCompleted(progress, levelId, boardId)))
+      .catch(() => {
+        // A failed write just means the unlock is re-derived next time progress loads.
+      });
+  }, [levelId, boardId]);
+
+  return (
+    <BoardScreen board={board} onExit={() => navigation.goBack()} onComplete={handleComplete} />
+  );
 }
