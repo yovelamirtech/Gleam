@@ -248,6 +248,91 @@ describe('placing a strip', () => {
   });
 });
 
+describe('row completion', () => {
+  it('reports no completed row for a placement that does not finish one', () => {
+    const session = fresh();
+    take(session, 0, 3);
+    const result = session.place(0, 0);
+    expect(result.ok && result.completedRows).toEqual([]);
+  });
+
+  it('reports the row once the placement that fills its last empty cell lands', () => {
+    const session = fresh();
+    take(session, 0, 5);
+    const first = session.place(0, 0);
+    expect(first.ok && first.completedRows).toEqual([]);
+
+    take(session, 0, 1);
+    const second = session.place(0, 5);
+    expect(second.ok && second.completedRows).toEqual([0]);
+  });
+
+  it('reports every row a single placement finishes at once', () => {
+    const session = fresh();
+    // Fill columns 0-4 of both all-colour-0 rows, leaving column 5 of each empty.
+    take(session, 0, 5);
+    session.place(0, 0);
+    take(session, 0, 5);
+    session.place(1, 0);
+
+    // One vertical strip lands on both remaining cells at once.
+    take(session, 0, 2, 'vertical');
+    const result = session.place(0, 5);
+    expect(result.ok && result.completedRows).toEqual([0, 1]);
+  });
+});
+
+describe('dev tool: instant completion', () => {
+  it('fills every empty cell with its required colour in one batch', () => {
+    const session = fresh();
+    take(session, 0, 3);
+    session.place(0, 0); // three real stones down first, so the batch has to skip them
+
+    session.completeInstantly();
+
+    expect(session.isComplete()).toBe(true);
+    for (let cell = 0; cell < board.cells.length; cell += 1) {
+      expect(session.cellAtIndex(cell).placed).toBe(board.cells[cell]);
+    }
+    expectSupplyMatchesBoard(session);
+  });
+
+  it('drops whatever was airborne or selected, since nothing is left to place', () => {
+    const session = fresh();
+    take(session, 1, 2);
+
+    session.completeInstantly();
+
+    expect(session.airborneStrip).toBeNull();
+    expect(session.traySelection).toBeNull();
+  });
+
+  it('does nothing, and does not notify, on an already-complete board', () => {
+    const session = fresh();
+    session.completeInstantly();
+    let notified = false;
+    session.subscribe(() => {
+      notified = true;
+    });
+
+    session.completeInstantly();
+
+    expect(notified).toBe(false);
+  });
+
+  it('keeps placement order monotonic on top of stones already placed', () => {
+    const session = fresh();
+    take(session, 0, 1);
+    session.place(0, 0, 1000);
+
+    session.completeInstantly(2000);
+
+    const orders = session.placements.map((p) => p.order);
+    expect(new Set(orders).size).toBe(orders.length);
+    expect(Math.min(...orders)).toBe(0);
+  });
+});
+
 describe('after the stones land', () => {
   it('empties the hand and keeps the tray on the same colour and count', () => {
     const session = fresh();

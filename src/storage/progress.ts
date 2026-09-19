@@ -53,8 +53,16 @@ export function boardStatus(progress: Progress, levelId: number, boardId: number
   return boardId === centreBoardId() ? 'unlocked' : 'locked';
 }
 
+/**
+ * The board wall's actual centre tile, by row and column - not
+ * `floor(BOARDS_PER_LEVEL / 2)`, which for an 8-wide wall lands on the left
+ * edge of the middle row (id 24 = row 3, col 0) rather than anywhere near
+ * the middle column.
+ */
 export function centreBoardId(): number {
-  return Math.floor(BOARDS_PER_LEVEL / 2);
+  const col = Math.floor(BOARDS_X / 2);
+  const row = Math.floor(BOARDS_Y / 2);
+  return row * BOARDS_X + col;
 }
 
 export async function loadProgress(): Promise<Progress> {
@@ -132,6 +140,29 @@ export function markBoardCompleted(progress: Progress, levelId: number, boardId:
     }
   }
 
+  return { ...progress, levels };
+}
+
+/**
+ * Dev tool: unlock every level and every board so any of them can be opened
+ * and played, without touching anything already `completed` (that status,
+ * and whatever placements back it, stays exactly as it was).
+ */
+export function unlockAll(progress: Progress): Progress {
+  const levels: Record<number, LevelProgress> = {};
+  for (let levelId = 0; levelId < LEVEL_COUNT; levelId += 1) {
+    const level = progress.levels[levelId] ?? emptyLevel('locked');
+    const boards: Record<number, BoardProgress> = { ...level.boards };
+    for (let boardId = 0; boardId < BOARDS_PER_LEVEL; boardId += 1) {
+      if (statusOf(boards, boardId) === 'locked') {
+        boards[boardId] = { status: 'unlocked', placements: [] };
+      }
+    }
+    levels[levelId] = {
+      status: level.status === 'locked' ? 'unlocked' : level.status,
+      boards,
+    };
+  }
   return { ...progress, levels };
 }
 

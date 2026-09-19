@@ -30,9 +30,7 @@ technical writeup of each:
    `tools/app-icon/`. **Went through 3 designs** based on live feedback;
    the current one (a round faceted rhinestone, 12 trapezoid facets around
    a centre "table", shaded by the app's fixed top-left light source) is
-   the one the user confirmed. See "Next up" below — the user wants the
-   in-game stones restyled to match this, and hasn't asked for the icon
-   itself to change again.
+   the one the user confirmed.
 6. **Level-complete celebration** — `LevelCompleteScreen` +
    `src/game/levelReplay.ts`: zoom out to the whole picture, a one-off
    sparkle sweep, every stone vanishing newest-first then reappearing
@@ -42,69 +40,453 @@ technical writeup of each:
    (`__tests__/levelReplay.test.ts`) is covered. The plan's "light
    zoom-in" during the vanish step (BUILD_PLAN.md, step 3) isn't
    implemented — only vanish/reappear themselves are.
+7. **In-game stones restyled to match the icon** — `src/ui/drawStone.ts`
+   now draws the same faceted-rhinestone shape as the app icon (8 wedges
+   instead of the icon's 12, for cell-scale draw-call cost). Not profiled
+   on a real device yet.
+8. **Opening screens** — `SplashScreen` (the studio wordmark, then an
+   auto-transition) and `TapToStartScreen` (the game's own icon, tap to
+   enter the levels wall).
+9. **Onboarding overlay** — `OnboardingOverlay`
+   (`src/components/OnboardingOverlay.tsx`), wired into `BoardScreen`. Two
+   steps, shown once ever (`gleam:onboarding:v1` in
+   `src/storage/onboarding.ts`, not per board): the colour row, then the
+   tray, each dimmed-around with a card above it and Skip/Next/Got it.
+   `BoardScreen` measures both rows itself (`onLayout` on the wrapper
+   `View`s around `ColorPicker`/`HudTray`, testIDs `color-picker-row` /
+   `hud-tray-row`) so the overlay never needs hardcoded coordinates.
+   `__tests__/onboarding.test.tsx` covers the sequence, skip, and the
+   AsyncStorage flag persisting across a remount; nothing about it has
+   been seen on an actual screen.
+10. **Sound, music and haptics** — `expo-audio` + `expo-haptics`. A click
+    on every placed stone, a chime on every finished board row, a fanfare
+    on a finished board, a quiet looping ambient pad throughout, and a
+    light haptic on every placement (haptics has no settings toggle - the
+    plan lists none). `src/audio/useGameSounds.ts` (the three one-shots +
+    haptic, gated by `settings.soundEnabled`) and
+    `src/audio/BackgroundMusic.tsx` (the loop, gated by
+    `settings.musicEnabled`, mounted once at the `App.tsx` root so it
+    survives navigation). Both read from a new shared
+    `SettingsProvider`/`useSettings` (`src/hooks/useSettings.tsx`) that
+    replaces `SettingsScreen`'s old local `loadSettings()`/`saveSettings()`
+    calls, so toggling a setting takes effect immediately everywhere
+    instead of only on that screen's own state. "Row complete" didn't
+    exist as a concept before this - `BoardSession.place()` now returns
+    `completedRows: number[]` (`src/game/session.ts`), the board rows
+    (of the 40-wide grid) that placement's cells just finished off; tested
+    in `__tests__/session.test.ts`. **The four `assets/sounds/*.wav` files
+    are placeholders**, not real sound design - synthesized directly in
+    code by `tools/sound-gen/make-sounds.mjs` (a tick, two ascending
+    chimes, a four-note fanfare, and a seamlessly-looping ambient pad; see
+    that tool's README for how the loop avoids any click). Replace them
+    with produced audio whenever it's ready; nothing else needs to change.
+11. **Dev tools** — everything behind `DEV_TOOLS_ENABLED`
+    (`src/constants/devTools.ts`, just React Native's own `__DEV__` - false
+    in any release build, nothing to strip by hand). A central
+    `DevToolsScreen` (a "Dev tools" row on `SettingsScreen`, shown only in
+    dev): unlock every level/board (`unlockAll` in `src/storage/progress.ts`),
+    jump straight to any level/board, reset progress, and an FPS overlay
+    toggle (`src/components/FpsOverlay.tsx`, floats over every screen from
+    the `App.tsx` root). Instant-complete
+    (`BoardSession.completeInstantly()`) and the solution overlay (a new
+    `showSolution` prop on `BoardCanvas`, a small colour swatch in every
+    still-empty cell) live on `BoardScreen` itself instead - a small `🛠`
+    button opens a panel with both, since they need a live board session.
+    `DevStoneGalleryScreen` shows every palette colour's stone at a few
+    sizes, free of any board or game state. Covered by
+    `__tests__/devTools.test.tsx` and new cases in `session.test.ts`/
+    `progress.test.ts`; not seen on an actual screen.
 
-All of the above is on branch `claude/laughing-clarke-url4me`, in one
-open PR (yovelamirtech/Gleam#8, currently draft). `npm run typecheck` and
-`npm test` are both clean as of this file's last edit (167+ tests).
+12. **Ads and monetization** — `react-native-google-mobile-ads` (banner +
+    interstitial) and `expo-iap` (the one-time "remove ads" purchase; not
+    `expo-in-app-purchases`, which is deprecated, and not the bare
+    `react-native-iap` package, which its own README says explicitly not to
+    use under Expo - `expo-iap` is the Expo-flavoured wrapper around the same
+    OpenIAP client). **Both are native modules** - see "Before you can build
+    a dev client" below, this is the biggest infrastructure change in the
+    project so far. `src/constants/ads.ts` holds the ad unit IDs (Google's
+    own public test IDs for now, see that file), `src/iap/constants.ts` the
+    one product SKU (`remove_ads`). `src/hooks/usePurchases.tsx`
+    (`PurchasesProvider`/`usePurchases`) tracks ownership: reconciles against
+    the store on connect via `getAvailablePurchases`, listens for a live
+    purchase through `useIAP`'s `onPurchaseSuccess`, and caches the result
+    locally (`src/storage/purchases.ts`) so ads stay off on every future
+    launch before that store connection resolves - the cache is
+    write-only-to-true, it can never turn ads back on, only the store can
+    revoke a purchase. `src/ads/BannerAdBox.tsx` (shown at the bottom of
+    `LevelsScreen` and `BoardsScreen`, not the board screen itself - didn't
+    want it competing with the painting canvas) and
+    `src/ads/LevelCompleteInterstitial.tsx` (non-visual, mounted in
+    `LevelCompleteScreen`, shows once per level completed - not per board,
+    that felt too frequent). `SettingsScreen` gained an "Ads" section: buy
+    button with the store's live price once fetched, and "Restore
+    purchases". Covered by `__tests__/purchases.test.tsx` and
+    `__tests__/ads.test.tsx` - found and fixed one real bug along the way
+    (see "Things worth knowing" below on the cache-vs-store race). Nothing
+    about ad rendering or the purchase sheet itself can be seen from a
+    remote container.
 
-## Next up, in BUILD_PLAN.md order
+13. **First real feedback pass, after a written description of every item
+    above** (no device, still - the user described what they saw and
+    wanted from screenshots/memory, not a live test). Scoped to the
+    clearly-bounded fixes only; the one big architectural ask (see "Next
+    up" item 8 below) was deliberately deferred to its own round rather
+    than folded in here:
+    - **`centreBoardId()`** (`src/storage/progress.ts`) computed
+      `floor(BOARDS_PER_LEVEL / 2)` = 24, which for an 8-wide wall is the
+      left edge of the middle row, not the middle column. Fixed to use
+      real row/col math (id 28).
+    - **Airborne strip could be silently destroyed** by touching the tray
+      again while stones were still hanging in the air (e.g. reaching to
+      grab another one) - `trayTouched`/`trayDragged` in
+      `BoardScreen.tsx` now ignore a fresh tray touch while
+      `session.airborneStrip` is non-null, instead of starting a new lift
+      that overwrote it.
+    - **Rotation pivoted around the strip's first stone**, not its centre
+      - `src/ui/airborneRotation.ts` (a new, independently unit-tested
+      pure function) computes the offset needed to keep the centre fixed;
+      `BoardScreen`'s `rotateStones` applies it to `stripX`/`stripY`.
+    - **The airborne strip's visual position and its drop target used to
+      be the same point**, so the "ghost" preview on the board sat
+      exactly under the floating stones with no sense of hovering. Split
+      into two offsets (`CARRY_OFFSET_Y` for the target, a new
+      `CARRY_VISUAL_LIFT` on top of it purely for where the strip
+      renders) plus a heavier drop shadow (`AirborneStrip.tsx`). Not
+      checked on a real screen for feel.
+    - **Tray and airborne stones looked like plain rounded squares**, not
+      the faceted rhinestone the board itself uses. New
+      `src/components/StoneIcon.tsx` (a small `drawStone` on its own tiny
+      Skia canvas) replaces the old plain `View` rendering in both
+      `HudTray.tsx` and `AirborneStrip.tsx`.
+    - **Onboarding now advances itself** when the player actually does
+      what the current step is pointing at (picks a colour; lifts a
+      strip out of the tray), not only on an explicit "Next"/"Got it"
+      tap - two new optional props on `OnboardingOverlay`
+      (`advanceFromStep0`/`advanceFromStep1`, "bump this counter to
+      advance") that `BoardScreen` feeds from the real interactions.
+    - **A real audio bug**: `setAudioModeAsync` was never called anywhere
+      in the app - the very plausible reason background music was never
+      heard (iOS in particular needs an active session configured, and
+      respects the ring/silent switch without one). Added to `App.tsx`.
+    - **The click sound was inconsistent under rapid placements** - one
+      shared player got `seekTo(0)` + `play()` called on it faster than
+      those settled, racing with itself. `useGameSounds.ts` now cycles
+      through a 4-player pool for clicks specifically (row/board fire
+      rarely enough not to need it). Also re-synthesized the click itself
+      to be lower-pitched and quieter (`tools/sound-gen/make-sounds.mjs`)
+      per "too harsh" feedback.
+    - **Settings toggles now confirm with a sound + light haptic when
+      switched on** (never when switched off) - direct, ungated
+      `useAudioPlayer`/`Haptics` calls in `SettingsScreen.tsx`, since the
+      whole point is confirming "sound was off, now it's on" even while
+      sound is (was) off.
+    - **`SplashScreen`** now fades the wordmark in (650ms) and back out
+      (550ms) on a plain white field instead of a hard cut, and
+      **`TapToStartScreen`** got a few decorative `StoneIcon`s and a soft
+      glow behind the game icon instead of a bare icon+text screen.
+    - **`LevelsScreen`/`BoardsScreen` were missing top safe-area padding**
+      - their headers could sit under the status bar/notch/Dynamic
+      Island. Both now add `insets.top`, matching every other screen.
+    - **Dev tools**: a new "Instantly finish level X and preview its
+      complete screen" row solves every one of a level's 48 boards for
+      real (not a blank shell) and marks it complete on the walls too,
+      so `LevelCompleteScreen` can actually be previewed without playing
+      a full level - the user specifically asked for this.
+    - **Not done this round, deliberately deferred**: a landing animation
+      when stones are placed (asked for, but risked being a bigger,
+      riskier rendering change than the rest of this list combined - see
+      "Next up" below); the "why is there no number telling me what
+      colour goes where" complaint, which the user's own bigger ask (item
+      8 below) folds into anyway once the whole picture is always
+      visible and zoomable.
+    Covered by new/extended tests: `__tests__/progress.test.ts`,
+    `__tests__/BoardScreen.test.tsx`, `__tests__/airborneRotation.test.ts`
+    (new), `__tests__/onboarding.test.tsx`, `__tests__/gameSounds.test.tsx`,
+    `__tests__/settingsScreen.test.tsx` (new),
+    `__tests__/devToolsScreen.test.tsx` (new), `__tests__/openingScreens.test.tsx`.
 
-1. **Opening screens** (מסכי פתיחה וניווט) — splash with the studio logo ->
-   "Tap to Start" with the game's own symbol. **Blocked on the user**: they
-   said they'll upload the studio logo file "later" (session where this
-   file was written) — check with them before starting this, don't invent
-   a placeholder logo. The game's own "Tap to Start" symbol can reuse the
-   app-icon rhinestone (see `tools/app-icon/`) once the stone restyle below
-   lands, so it doesn't visually contradict the in-game look.
-2. **Restyle the in-game stones to match the icon** — the user's own
-   words: *"תעדכן את איך נראות אבני המשחק למשהו יותר כמו בלוגו"* ("update
-   how the game's stones look to something more like the logo"). Right now
-   `src/ui/drawStone.ts` draws a stone as a rounded square with a linear
-   gradient, one diagonal facet line and an oval highlight — the *first*
-   icon design's language, which the user rejected for not looking enough
-   like a real diamond-painting rhinestone (see `tools/app-icon/README.md`
-   and the git history of `tools/app-icon/make-icons.mjs` for the two
-   rejected designs and the accepted one). The icon now in
-   `tools/app-icon/make-icons.mjs`'s `rhinestone()` function — a circle of
-   12 trapezoid facets radiating from a small flat centre circle, each a
-   flat shade (not a gradient) picked by that facet's angle against the
-   fixed top-left light source — is the shape language to bring into
-   `drawStone.ts`. The hard part isn't the geometry (it's the same
-   angle-vs-light-source shading `rhinestone()` already does, just at
-   board-cell scale) but performance: a board redraws up to 1600 stones
-   per frame during a placement animation and `BoardCanvas.tsx` already
-   notes stones are cheap only because they're baked into one Skia
-   `Picture`; 12 polygons per stone instead of today's one rounded rect +
-   one line + one oval is roughly 5-10x the draw calls per stone. Profile
-   on a real device before assuming that's fine, and consider fewer wedges
-   (6-8?) at cell scale, where the icon's 12 is overkill anyway once cells
-   are ~24px. `LevelCompleteCanvas.tsx` deliberately draws flat colour
-   *without* the stone treatment because gradients/facets don't read at
-   that zoom (320x240 cells on one screen) — that reasoning doesn't change
-   just because `drawStone.ts` gets restyled, so leave it alone.
-3. **Onboarding overlay** — first-visit tap targets on the board screen,
-   shown once (AsyncStorage flag), skippable. Nothing built yet.
-4. **Ads & monetization** (AdMob banner + interstitial, one-time IAP to
-   remove both) — nothing built yet. Needs its own research pass on
-   current Expo-compatible libraries (`AGENTS.md`'s warning about Expo v57
-   API drift applies especially here — training data may know an older,
-   now-wrong integration path for AdMob under Expo).
-5. **Sound and music** — click/row/board-complete sounds, background
-   music, haptics on placement. `src/storage/settings.ts` already has the
-   on/off flags from the settings screen; nothing plays yet. Look at how
-   the sibling apps `yovelamirtech/letter-wheel` and
-   `yovelamirtech/bullseye-words` wired `expo-audio` and `expo-haptics`
-   (both used it, not the older `expo-av`) before building this from
-   scratch — same "style reference, not code to copy verbatim" spirit as
-   the settings screen.
-6. **Dev tools** — auto-unlock everything, jump to a specific board,
-   instant-complete, solution overlay, FPS counter, free look at the
-   faux-3D style. All gated behind one clear flag/menu per the plan so
-   they're easy to strip before release. Nothing built yet.
+All of the above is on branch `claude/affectionate-cannon-z4do8h`. PR #8
+(items 1-6) is merged into `main`; PR #9 (items 7-13) is open. `npm run
+typecheck` and `npm test` are both clean as of this file's last edit
+(218 tests).
+
+## Ads/IAP and plain Expo Go
+
+Item 12 pulled in `react-native-google-mobile-ads` and `expo-iap`, both
+native modules - and `react-native-google-mobile-ads` specifically crashes
+the *whole app on launch* under plain Expo Go, not just its own ad code:
+it calls `TurboModuleRegistry.getEnforcing(...)` at the top of its own
+module, the moment anything imports it, native module or not. A first
+version of this work did `import MobileAds from 'react-native-google-mobile-ads'`
+directly in `App.tsx` and broke Expo Go entirely as a result.
+
+Fixed with one narrow seam: `src/ads/googleMobileAds.ts` is the only place
+that package is required, wrapped in a `try`/`catch`, exporting `null` when
+the native module isn't there. Every other ads file (`BannerAdBox.tsx`,
+`LevelCompleteInterstitial.tsx`, `App.tsx`'s `MobileAds().initialize()`)
+goes through that instead of importing the package directly, and renders/
+does nothing when it's `null`. `src/constants/ads.ts` also stopped
+importing `TestIds` from the package for the same reason - its two test ad
+unit IDs are hardcoded there now, `Platform.select`'d the same way `TestIds`
+itself is internally. `expo-iap` didn't need this: `useIAP`'s own
+`initConnection` call is already wrapped in a try/catch inside the
+package, so a missing store connection just leaves `connected: false`
+rather than crashing.
+
+Net effect: **everything except ads/IAP themselves is still testable
+through plain `npx expo start` + Expo Go** - the board game, all screens,
+sound/music/haptics, dev tools, onboarding. `__tests__/adsUnavailable.test.tsx`
+covers the fallback path directly (mocks the package to throw, same as a
+real missing native module would, and asserts nothing crashes). Ads
+themselves - the banner, the interstitial, the purchase flow - still need
+a real dev client to see rendered; see the next section for what that
+needs.
+
+## Before you can build a dev client
+
+`npx expo start` now works fine for Expo Go, but a dev client is still the
+only way to actually *see* ads or exercise the purchase flow, since Expo Go
+can't load that native module at all. `eas.json` (new, this session) has a
+`development` build profile ready (`developmentClient: true`), but building
+it needs a few things only you can provide, since none of them exist yet:
+
+1. **An Expo/EAS account** linked to this project (`eas login`, then `eas
+   build:configure` sets `extra.eas.projectId` in `app.json` - not there
+   yet). EAS builds run in the cloud, so once this is set up you can
+   trigger a build and download the resulting `.apk`/`.ipa` straight from
+   your phone at expo.dev - no local machine needed.
+2. **`ios.bundleIdentifier` and `android.package`** in `app.json` - neither
+   is set. These are permanent app identifiers (can't casually change
+   later, and the store listings will be built around them), so this
+   session left them for you to choose rather than guessing something like
+   `com.yourstudio.gleam`.
+3. **A real AdMob account** (App ID + ad unit IDs) - `app.json`'s
+   `react-native-google-mobile-ads` plugin config and
+   `src/constants/ads.ts` both currently hold Google's own published *test*
+   IDs, which is safe to build and even publish with (they just show
+   Google's test creative instead of real ads), but obviously earn nothing
+   until swapped for real ones.
+4. **The `remove_ads` in-app product**, created with that exact ID in both
+   App Store Connect and the Google Play Console, before a real purchase
+   (as opposed to a Play/TestFlight sandbox one) can succeed.
+
+None of this blocks running the test suite or `npm run typecheck`, and
+none of it blocks continuing to other BUILD_PLAN.md items in the
+meantime - it only blocks actually installing a build on a phone from this
+point forward.
+
+## On-device checklist
+
+Nothing in this project has been run on a real device or simulator this
+whole build (remote container, nothing attached) — every item below is
+still open, gathered here in one place per the user's request, to go
+through together once a device is available rather than repeating
+"not checked on a real device" scattered through this file:
+
+- **Splash fade timing and layout** — is the 650ms fade-in/500ms hold/550ms
+  fade-out beat right before `SplashScreen` moves on; does `wordmark.png`
+  read at the right size and position across phone sizes
+  (`src/screens/SplashScreen.tsx`).
+- **Tap-to-start layout** — does the icon/title/prompt sizing and spacing
+  look right, and do the new decorative `StoneIcon` sparkles and glow read
+  as intentional rather than cluttered at real phone sizes
+  (`src/screens/TapToStartScreen.tsx`).
+- **This round's board-screen fixes, all unverified on a real screen**:
+  does the airborne strip's new extra hover height
+  (`CARRY_VISUAL_LIFT`) actually read as "floating above the board" or
+  does it now feel too far from the finger; does the heavier drop shadow
+  help or look odd; does rotating a strip around its centre feel natural;
+  does `StoneIcon` (the tray/airborne stones' own tiny Skia canvas) look
+  right and render fast enough at `AIRBORNE_STONE` (30px) and `TRAY_SLOT`
+  (40px) sizes - it's a second Skia canvas per visible stone, on top of
+  the board's own, and hasn't been profiled (`src/components/StoneIcon.tsx`,
+  `src/screens/BoardScreen.tsx`, `src/components/HudTray.tsx`,
+  `src/components/AirborneStrip.tsx`).
+- **Onboarding overlay** — does the dim/spotlight band actually land on
+  the colour row and tray row on a real layout (the estimate in
+  `OnboardingOverlay`'s `CARD_HEIGHT_ESTIMATE` could be off for a longer
+  system font size); does the card sit legibly above both, especially in
+  landscape or on a short screen where `cardTop` clamps to `12`
+  (`src/components/OnboardingOverlay.tsx`).
+- **In-game stone restyle frame rate** — 8-wedge faceted stones instead of
+  the old rounded-rect-plus-gradient one, up to 1600 per board redraw
+  during a placement animation; drop to 6 wedges if it stutters
+  (`src/ui/drawStone.ts`).
+- **Level-complete celebration feel** — zoom-out, sparkle sweep,
+  vanish/reappear timing and frame rate; only the ordering logic is
+  covered by tests (`src/screens/LevelCompleteScreen.tsx`,
+  `src/game/levelReplay.ts`).
+- **Sound/music/haptics, all of it** — nothing about audio can be verified
+  from a remote container: whether the four placeholder sounds
+  (`assets/sounds/*.wav`, `tools/sound-gen/`) are actually audible at a
+  sane volume (the missing `setAudioModeAsync` call was fixed this round -
+  see "Done" item 13 - but that was diagnosed from reading the code, not
+  from hearing it work), whether the background pad's loop point is truly
+  seamless in practice (not just zero-crossing on paper), whether the
+  retuned, pooled click sound now reads as "gentle" and distinct over
+  rapid placements the way the user asked for, and whether the light
+  haptic (`Haptics.ImpactFeedbackStyle.Light`) - on both the game itself
+  and the new settings-toggle confirmation - feels right. Also: these are
+  synthesized placeholders standing in for real sound design (see
+  `tools/sound-gen/README.md`) — expect the user to want them replaced
+  once heard, same as the app icon and stone restyle both took a few
+  rounds.
+- **Dev tools** — cosmetic only, but worth a glance: does the FPS overlay
+  sit somewhere it doesn't block anything important on a real notch/insets
+  layout (`src/components/FpsOverlay.tsx`); does the board screen's small
+  `🛠` panel (`src/screens/BoardScreen.tsx`) overlap the exit button or the
+  HUD at odd aspect ratios; does `DevStoneGalleryScreen`'s grid lay out
+  sensibly at all four size options on a real screen width. None of this
+  ships to players (`DEV_TOOLS_ENABLED` is `false` in any release build),
+  so it's low priority relative to everything else on this list.
+- **Ads and IAP, all of it** — nothing here can be verified from a remote
+  container at all, and it needs an actual dev-client build first (see
+  "Before you can build a dev client" above), not just a device: does the
+  banner's adaptive height look right at the bottom of `LevelsScreen`/
+  `BoardsScreen` (`src/ads/BannerAdBox.tsx`) without shifting the grid
+  awkwardly; does the interstitial's timing after a level completes feel
+  right or too abrupt (`src/ads/LevelCompleteInterstitial.tsx`); does the
+  real store purchase sheet for `remove_ads` work end to end once the
+  product exists in App Store Connect/Play Console (test purchases only
+  until then); does "Restore purchases" in `SettingsScreen` actually find a
+  prior purchase after a reinstall.
+
+## Next up
+
+**Start with item 8 below** (the unified wall) — that is what the user
+asked for next, explicitly, in the same message this whole list comes
+from. The rest of this list is numbered by BUILD_PLAN.md order, not
+priority; items 1-6 are already done (kept here as pointers into "Done"
+above) and item 7 depends on the user supplying images, so it isn't
+blocking anything.
+
+1. ~~**Opening screens**~~ done — see "Done" item 8 above. Nothing else in
+   מסכי פתיחה וניווט is outstanding (Levels/Board/Settings all exist). The
+   user provided the studio logo as `assets/studio_logo/wordmark.svg`
+   (plus two square icon variants, `icon-primary.svg`/`icon-appstore.svg`,
+   not used in-app — they read as app-store-listing assets, not a splash
+   asset; revisit if the user says otherwise). If the user replaces
+   `wordmark.svg` later, re-render it to `wordmark.png` the same way
+   `tools/app-icon` rasterizes its own SVG (see this file's git history
+   for the one-off script — not kept as a `tools/`-style reusable one
+   since this asset doesn't change often).
+2. ~~**Restyle the in-game stones to match the icon**~~ done — see "Done"
+   item 7 above.
+3. ~~**Onboarding overlay**~~ done — see "Done" item 9 above.
+4. ~~**Ads & monetization**~~ done — see "Done" item 12 above. Blocked from
+   actually being tested on a device until the account/identifier setup in
+   "Before you can build a dev client" above happens.
+5. ~~**Sound and music**~~ done — see "Done" item 10 above. Didn't end up
+   looking at how the sibling apps wired `expo-audio`/`expo-haptics`
+   (HANDOFF.md's earlier note here suggested that) — this session's read
+   of the installed packages' own `.d.ts` files (empty README this SDK
+   version) was enough, and the two apps' actual wiring wasn't checked.
+   Worth a look if the on-device pass above turns up something odd.
+6. ~~**Dev tools**~~ done — see "Done" item 11 above.
 7. **More source images for levels 8-20** — `LEVEL_COUNT` is 20
    (`src/constants/board.ts`), only 7 levels are prepared. The user
    provides source images; run `tools/prep-images` on them the same way
    PR #6 did.
+8. **START HERE — the unified wall.** The user's own next instruction,
+   verbatim (Hebrew, from the session that wrote this note), was: "תתעד
+   הכל ואני רוצה שהסוכן הבא יתחיל בקיר המאוחד" — "document everything,
+   and I want the next agent to start on the unified wall." This whole
+   item is that documentation. No code for it exists yet; this is a
+   planning-plus-implementation task, not a quick fix. **Do not skip
+   straight to coding** — this changes navigation, rendering, and touches
+   the performance complaint below too; get the approach confirmed
+   (`AskUserQuestion` or similar) before writing code, the way this
+   session did for the ads/IAP infrastructure change.
+
+   **What the user actually asked for**, their own words translated
+   closely (originally about the board screen, but they confirmed - see
+   below - the same idea applies to the levels wall too):
+
+   > "דמיינתי יותר את כל הבורדים מחוברים יחד ורק מופרדים עם קו. אפשר
+   > לעשות זום אין ואאוט חופשי על הציור הכולל, כדי לראות את הבורד שלי,
+   > ותמיד אפשר לשחק בו. כשאתה במשחק אתה משחק בכל הציור ביחד."
+   > — "I imagined all the boards connected together, only separated by
+   > a line. You can freely zoom in/out on the whole picture to see your
+   > board, and you can always play on it. When you're in the game
+   > you're playing on the whole picture together."
+
+   > "זה צריך להיות קיר אחד ענק עם כל התמונות. רק אחת פתוחה במרכז, והשאר
+   > מסביב חסומות. אפשר לעשות זום אין ואאוט חופשי להסתכל מקום מאוד על
+   > היצירות שלך ולזוז חופשי בין היצירות."
+   > — (about the *levels* wall) "This should be one giant wall with
+   > every picture. Only one open in the centre, the rest locked around
+   > it. Free zoom in/out to look closely at your works and move freely
+   > between them."
+
+   So **two separate screens, same idea applied twice**:
+   - Inside a level: today `BoardsScreen` (a tappable 8x6 grid of tiles)
+     is a separate screen from `BoardRoute`/`BoardScreen` (one 40x40
+     board at a time, entered by tapping a tile). The ask is to collapse
+     these into one screen - the whole 320x240-cell level as a single
+     pannable/zoomable canvas, thin lines between boards instead of a
+     hard screen transition, and gameplay (tray, HUD, placing stones)
+     working against whatever board the viewport is currently centred
+     on/over. A board earns its "unlocked" status exactly as it does
+     today (finishing a neighbour), it just doesn't get its own screen
+     any more - locked boards would need some kind of dimmed/greyed
+     treatment *within* the single canvas instead of not being
+     reachable.
+   - The levels wall: today `LevelsScreen` is a `ScrollView` grid of
+     tiles, one per level, each a small preview image. The ask is a
+     single giant zoomable/pannable canvas of *every* level's full
+     preview artwork (not just a small tile), only the centre level
+     unlocked at the start, same free zoom/pan to browse.
+
+   **In the same message, the user also asked**: "צריך להבין איך משפרים
+   ביצועים כי לוח מלא מתחיל להיות כבר קשה להריץ, ואני רוצה להריץ את כל
+   התמונה" — "need to figure out how to improve performance, because a
+   full board is already getting hard to run, and I want to run the
+   whole picture." **These two asks pull in opposite directions** unless
+   handled carefully: today's board screen already struggles rendering
+   one 40x40 board (1600 cells, each a faceted `drawStone` with up to 8
+   Skia draw calls); the wall this item asks for is a 320x240-cell
+   canvas (48x the cells) for one level, and the levels wall is 20 full
+   preview images at once. Rendering everything all the time is very
+   likely a non-starter - some form of only-draw-what's-visible
+   (viewport-culled / tiled rendering) is probably required, not
+   optional polish. No profiling has been done on a real device yet (see
+   "On-device checklist"), so treat "why is the current board already
+   slow" as an open question to investigate first, not an assumption -
+   it could be the per-stone Skia draw-call count, the picture-rebuild
+   strategy, the gesture/viewport math, or something else entirely, and
+   the fix for the unified wall may or may not be the same fix as for
+   today's single-board slowness.
+
+   **Relevant existing code to read before designing anything:**
+   - `src/ui/viewport.ts` — the current pan/zoom math, clamped to one
+     board's bounds (`fitViewport`, `zoomAround`, `clampViewport`). Will
+     need to work over a whole level's (or whole wall's) bounds instead.
+   - `src/components/BoardCanvas.tsx` — draws one board as a handful of
+     baked Skia `Picture`s (grid, stones, preview), recomposited via a
+     `<Group transform={...}>` driven by the viewport's shared values.
+     The closest existing precedent for "a lot of cells at once" is:
+   - `src/screens/LevelCompleteScreen.tsx` +
+     `src/components/LevelCompleteCanvas.tsx` — already renders a whole
+     level (320x240 cells) at once, but flattened to solid colour (no
+     per-stone faceting) specifically because that's too much to draw
+     at full fidelity every frame, and even then throttles its own
+     redraw rate (`FRAME_BUDGET_MS`). Worth understanding exactly why
+     that tradeoff was made before assuming full-fidelity stones are
+     viable at wall scale.
+   - `src/game/session.ts`/`src/hooks/useBoardSession.ts` — currently
+     one `BoardSession` per board, loaded/persisted independently
+     (`src/game/persistence.ts`, keyed by board id string). A unified
+     canvas spanning many boards raises the question of whether that
+     stays one session per board (probably yes, for minimal disruption
+     to the exact-stone-economy logic) or needs to change.
+   - `src/screens/BoardsScreen.tsx`, `src/screens/LevelsScreen.tsx`,
+     `src/screens/BoardRoute.tsx`, `App.tsx`'s `Stack.Navigator` - the
+     navigation structure this item would restructure or remove.
+   - `src/storage/progress.ts` - board/level lock state
+     (`boardStatus`/`centreBoardId`/`markBoardCompleted`), which the
+     within-canvas "locked" treatment would read the same way `BoardsScreen`
+     does today, just rendered differently (dimmed on-canvas instead of
+     a separate locked tile).
 
 ## Things worth knowing that aren't obvious from the code alone
 
@@ -119,6 +501,13 @@ open PR (yovelamirtech/Gleam#8, currently draft). `npm run typecheck` and
   "what did this board look like" from the walls' own store, it isn't
   there — go through `game/persistence.ts` by board id string instead,
   the way `src/game/levelReplay.ts` does.
+- **`Progress.onboardingSeen` (`src/storage/progress.ts`) is also dead** —
+  a pre-existing field from PR #5, set to `false` at init and never read or
+  written anywhere else. The real onboarding-seen flag this session built
+  (see "Done" item 9) is a separate, unrelated key
+  (`gleam:onboarding:v1`, `src/storage/onboarding.ts`) — not a fix for
+  this field, and not something this session touched. Worth deleting in a
+  pass that's actually about `Progress`'s shape, not in passing.
 - **Cross-promotion links were explicitly rejected** — BUILD_PLAN.md
   originally asked for a "more games" section linking the studio's other
   titles in Settings. The user said no, they don't want that in the app at
@@ -128,9 +517,20 @@ open PR (yovelamirtech/Gleam#8, currently draft). `npm run typecheck` and
   in-game stone restyle (item 2 above) also needs a couple of passes
   against real screenshots/feedback rather than getting it right blind
   from a text description.
+- **A real race in `usePurchases`, caught by its own test, not by inspection**
+  — the local "ads removed" cache and the live store both call
+  `setAdsRemoved`, and they resolve at different times. The first version
+  set the cached value unconditionally on load; if the store's own
+  `onPurchaseSuccess`/`getAvailablePurchases` reconciliation fired first
+  (plausible - the cache read goes through `AsyncStorage`, itself async)
+  and the cache turned out to be a stale `false` (e.g. the write from a
+  *previous* purchase hadn't landed yet, or this is a fresh install after a
+  restore), the cache's `then` would fire second and flip `adsRemoved` back
+  to `false` right after the store had just confirmed it `true`. Fixed by
+  making the cache read one-directional - `if (cached) setAdsRemoved(true)`,
+  never `setAdsRemoved(cached)` - so it can only ever turn ads off sooner,
+  never back on. `__tests__/purchases.test.tsx`'s "picks up a purchase
+  already owned" test failed against the original code before this fix.
 - **Nothing here has been run on a real device or simulator** this whole
-  session (remote container, no attached device). Everything is verified
-  by `npm run typecheck` + `npm test` + reading rendered PNGs for the icon.
-  Anything animation- or performance-sensitive (the level-complete replay,
-  and especially the stone restyle above) should get an actual on-device
-  check before being called done.
+  build (remote container, no attached device) — see "On-device checklist"
+  above for the running list of what to verify once one is available.

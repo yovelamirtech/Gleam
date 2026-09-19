@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BannerAdBox } from '../ads/BannerAdBox';
 import SettingsButton from '../components/SettingsButton';
 import { LEVELS_X, LEVEL_COUNT } from '../constants/board';
 import { preparedLevelFor } from '../game/levels';
@@ -44,71 +45,73 @@ export default function LevelsScreen({ navigation }: Props) {
   const tileSize = Math.floor((width - gutter * (LEVELS_X + 1)) / LEVELS_X);
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}
-    >
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Levels</Text>
-          <Text style={styles.subtitle}>Finish a level to open the ones next to it.</Text>
-        </View>
-        <SettingsButton onPress={() => navigation.navigate('Settings')} />
+    <View style={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 8 }]}>
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.title}>Levels</Text>
+              <Text style={styles.subtitle}>Finish a level to open the ones next to it.</Text>
+            </View>
+            <SettingsButton onPress={() => navigation.navigate('Settings')} />
+          </View>
+
+          <View style={[styles.grid, { gap: gutter }]}>
+            {Array.from({ length: LEVEL_COUNT }, (_, levelId) => {
+              const status = progress.levels[levelId]?.status ?? 'locked';
+              const unlocked = status !== 'locked';
+              const prepared = preparedLevelFor(levelId);
+
+              if (!prepared) {
+                return (
+                  <Pressable
+                    key={levelId}
+                    disabled={!unlocked}
+                    onPress={() => navigation.navigate('Boards', { levelId })}
+                    style={[
+                      styles.tile,
+                      { width: tileSize, height: tileSize },
+                      !unlocked && styles.tileLocked,
+                      status === 'completed' && styles.tileCompleted,
+                    ]}
+                  >
+                    <Text style={[styles.tileLabel, !unlocked && styles.tileLabelLocked]}>
+                      {unlocked ? levelId + 1 : '🔒'}
+                    </Text>
+                  </Pressable>
+                );
+              }
+
+              return (
+                <Pressable
+                  key={levelId}
+                  disabled={!unlocked}
+                  onPress={() => navigation.navigate('Boards', { levelId })}
+                  style={[
+                    styles.tileArtwork,
+                    { width: tileSize, height: tileSize },
+                    status === 'completed' && styles.tileCompleted,
+                  ]}
+                >
+                  <ImageBackground
+                    source={prepared.previewSource}
+                    style={styles.tileArtworkImage}
+                    imageStyle={!unlocked && styles.tileImageLocked}
+                  >
+                    {!unlocked && (
+                      <View style={styles.tileLockOverlay}>
+                        <Text style={styles.tileLabelLocked}>🔒</Text>
+                      </View>
+                    )}
+                  </ImageBackground>
+                </Pressable>
+              );
+            })}
+          </View>
+      </ScrollView>
+      <View style={{ paddingBottom: insets.bottom }}>
+        <BannerAdBox />
       </View>
-
-      <View style={[styles.grid, { gap: gutter }]}>
-        {Array.from({ length: LEVEL_COUNT }, (_, levelId) => {
-          const status = progress.levels[levelId]?.status ?? 'locked';
-          const unlocked = status !== 'locked';
-          const prepared = preparedLevelFor(levelId);
-
-          if (!prepared) {
-            return (
-              <Pressable
-                key={levelId}
-                disabled={!unlocked}
-                onPress={() => navigation.navigate('Boards', { levelId })}
-                style={[
-                  styles.tile,
-                  { width: tileSize, height: tileSize },
-                  !unlocked && styles.tileLocked,
-                  status === 'completed' && styles.tileCompleted,
-                ]}
-              >
-                <Text style={[styles.tileLabel, !unlocked && styles.tileLabelLocked]}>
-                  {unlocked ? levelId + 1 : '🔒'}
-                </Text>
-              </Pressable>
-            );
-          }
-
-          return (
-            <Pressable
-              key={levelId}
-              disabled={!unlocked}
-              onPress={() => navigation.navigate('Boards', { levelId })}
-              style={[
-                styles.tileArtwork,
-                { width: tileSize, height: tileSize },
-                status === 'completed' && styles.tileCompleted,
-              ]}
-            >
-              <ImageBackground
-                source={prepared.previewSource}
-                style={styles.tileArtworkImage}
-                imageStyle={!unlocked && styles.tileImageLocked}
-              >
-                {!unlocked && (
-                  <View style={styles.tileLockOverlay}>
-                    <Text style={styles.tileLabelLocked}>🔒</Text>
-                  </View>
-                )}
-              </ImageBackground>
-            </Pressable>
-          );
-        })}
-      </View>
-    </ScrollView>
+    </View>
   );
 }
 

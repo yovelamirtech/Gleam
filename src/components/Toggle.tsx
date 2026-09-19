@@ -8,13 +8,14 @@ const TOGGLE_TRAVEL = 20; // track width (50) - thumb (24) - padding on both sid
 interface Props {
   value: boolean;
   onValueChange: (value: boolean) => void;
+  testID?: string;
 }
 
 /**
  * A custom switch instead of the built-in RN `Switch`: on Android it
  * sometimes ignores `trackColor` and shows the system's own green accent.
  */
-export default function Toggle({ value, onValueChange }: Props) {
+export default function Toggle({ value, onValueChange, testID }: Props) {
   const anim = useRef(new Animated.Value(value ? 1 : 0)).current;
 
   useEffect(() => {
@@ -35,7 +36,7 @@ export default function Toggle({ value, onValueChange }: Props) {
   });
 
   return (
-    <TouchableOpacity activeOpacity={0.8} onPress={() => onValueChange(!value)}>
+    <TouchableOpacity testID={testID} activeOpacity={0.8} onPress={() => onValueChange(!value)}>
       <Animated.View style={[styles.track, { backgroundColor: trackBackground }]}>
         <Animated.View style={[styles.thumb, { transform: [{ translateX }] }]} />
       </Animated.View>

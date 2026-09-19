@@ -1,16 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
+import { LayoutChangeEvent, LayoutRectangle, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useGameSounds } from '../audio/useGameSounds';
 import AirborneStripView, { AIRBORNE_STONE } from '../components/AirborneStrip';
 import { BoardCanvas, CELL, type DropPreview } from '../components/BoardCanvas';
 import ColorPicker from '../components/ColorPicker';
 import HudTray, { trayMetrics } from '../components/HudTray';
+import OnboardingOverlay, { type OnboardingStep } from '../components/OnboardingOverlay';
+import { DEV_TOOLS_ENABLED } from '../constants/devTools';
 import { resolveDropHead } from '../game/drop';
 import { useBoardSession } from '../hooks/useBoardSession';
 import type { BoardData, Orientation } from '../game/types';
+import { hasSeenOnboarding, markOnboardingSeen } from '../storage/onboarding';
+import { rotationPivotShift } from '../ui/airborneRotation';
 import { theme } from '../ui/theme';
 import { countAtX, shouldLift } from '../ui/trayGesture';
 import {
@@ -21,8 +26,15 @@ import {
   type ViewportBounds,
 } from '../ui/viewport';
 
-/** Where the strip sits relative to the finger while it is being carried. */
+/** Where the strip's *target* (the cell it would land on) sits relative to the finger. */
 const CARRY_OFFSET_Y = AIRBORNE_STONE * 1.7;
+/**
+ * Extra height the strip *renders* above that target, on top of
+ * `CARRY_OFFSET_Y` - the gap that reads as "these stones are hovering over
+ * the board" rather than "these stones are sitting on the cell they'll
+ * land in", which is what it looked like with the two at the same spot.
+ */
+const CARRY_VISUAL_LIFT = AIRBORNE_STONE * 1.1;
 
 interface Props {
   board: BoardData;
@@ -44,6 +56,7 @@ interface Props {
  */
 export function BoardScreen({ board, onExit, onComplete }: Props) {
   const { session, revision, ready } = useBoardSession(board);
+  const sounds = useGameSounds();
 
   /** Guards against firing onComplete again on every later revision. */
   const completedRef = useRef(false);
@@ -53,9 +66,50 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
   useEffect(() => {
     if (!completedRef.current && session.isComplete()) {
       completedRef.current = true;
+      sounds.onBoardComplete();
       onComplete?.();
     }
+    // sounds' identity changes with the settings toggle; only board completion should re-fire this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, revision, onComplete]);
+
+  // First-run coach marks. `null` means "still checking storage" so the
+  // overlay never flashes on for a returning player while that resolves.
+  const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
+  const [colorPickerLayout, setColorPickerLayout] = useState<LayoutRectangle | null>(null);
+  const [trayLayout, setTrayLayout] = useState<LayoutRectangle | null>(null);
+  useEffect(() => {
+    hasSeenOnboarding().then(setOnboardingSeen);
+  }, []);
+  const dismissOnboarding = useCallback(() => {
+    setOnboardingSeen(true);
+    markOnboardingSeen();
+  }, []);
+  // Bumped whenever the player actually does what the current onboarding
+  // step is pointing at, so the overlay can move itself along instead of
+  // waiting for an explicit "Next" tap.
+  const [colorPickedSignal, setColorPickedSignal] = useState(0);
+  const [stripLiftedSignal, setStripLiftedSignal] = useState(0);
+  const onboardingSteps: OnboardingStep[] | null =
+    onboardingSeen === false && colorPickerLayout && trayLayout
+      ? [
+          {
+            target: colorPickerLayout,
+            title: 'Pick a colour',
+            body: 'Tap a swatch to pick up its stones.',
+          },
+          {
+            target: trayLayout,
+            title: 'Place the stones',
+            body: 'Slide sideways to choose how many, then pull up and drag them onto the board.',
+          },
+        ]
+      : null;
+
+  // Dev tools (BUILD_PLAN.md): instant-complete and the solution overlay both
+  // need a live session, so they live here rather than on the DevTools menu.
+  const [devPanelOpen, setDevPanelOpen] = useState(false);
+  const [showSolution, setShowSolution] = useState(false);
 
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const canvasRef = useRef<View>(null);
@@ -82,6 +136,7 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
   // numbers and do every decision back on the JS thread.
   const stoneHalf = AIRBORNE_STONE / 2;
   const carryOffsetY = CARRY_OFFSET_Y;
+  const carryVisualLift = CARRY_VISUAL_LIFT;
 
   const bounds = useMemo<ViewportBounds>(
     () => ({
@@ -186,15 +241,24 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
       setPreview(null);
       const head = headAt(headX, headY);
       if (!head) return;
-      session.place(head.row, head.col);
+      const result = session.place(head.row, head.col);
+      if (!result.ok) return;
+      sounds.onStonePlaced();
+      if (result.completedRows.length > 0) sounds.onRowComplete();
     },
-    [session, headAt]
+    [session, headAt, sounds]
   );
 
-  /** Touching the tray takes one stone — or whichever stone is under the finger. */
+  /**
+   * Touching the tray takes one stone — or whichever stone is under the
+   * finger. Not while something is already airborne: that strip is still
+   * waiting to be placed somewhere, and a fresh tray touch used to silently
+   * throw it away and start a new one in its place.
+   */
   const trayTouched = useCallback(
     (x: number) => {
       lifted.current = false;
+      if (session.airborneStrip) return;
       session.setSelectionCount(countAtX(x, trayMetrics));
     },
     [session]
@@ -202,17 +266,21 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
 
   /**
    * A tray drag: sideways sizes the strip, an upward pull lifts it out, and
-   * once it is out the stones follow the finger.
+   * once it is out the stones follow the finger. Blocked from starting a new
+   * lift while a strip from an earlier gesture is still airborne, for the
+   * same reason as `trayTouched`.
    */
   const trayDragged = useCallback(
     (x: number, translationY: number, headX: number, headY: number) => {
       if (!lifted.current) {
+        if (session.airborneStrip) return;
         if (!shouldLift(translationY)) {
           session.setSelectionCount(countAtX(x, trayMetrics));
           return;
         }
         if (!session.liftStrip(orientation.current)) return;
         lifted.current = true;
+        setStripLiftedSignal((value) => value + 1);
       }
       updatePreview(headX, headY);
     },
@@ -229,10 +297,23 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
     [commitDrop]
   );
 
+  /**
+   * Flips the airborne strip in place around its own centre. The strip's
+   * screen position (`stripX`/`stripY`) is its top-left corner, so swapping a
+   * `count x 1` bounding box for a `1 x count` one (or back) shifts that
+   * corner by half the size difference on each axis - otherwise the strip
+   * pivots around its first stone instead of its middle.
+   */
   const rotateStones = useCallback(() => {
+    const before = session.airborneStrip;
     if (!session.rotateStrip()) return;
-    orientation.current = session.airborneStrip?.orientation ?? orientation.current;
-  }, [session]);
+    const after = session.airborneStrip;
+    orientation.current = after?.orientation ?? orientation.current;
+    if (!before || !after) return;
+    const { dx, dy } = rotationPivotShift(before, after, AIRBORNE_STONE);
+    stripX.value += dx;
+    stripY.value += dy;
+  }, [session, stripX, stripY]);
 
   // --- gestures -----------------------------------------------------------
 
@@ -245,16 +326,19 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
         })
         .onUpdate((event) => {
           // Keep the stones under the finger here, decide what that means in JS.
+          // The strip renders higher than its own target cell (carryVisualLift on
+          // top of carryOffsetY), so it visibly hovers over the board instead of
+          // sitting flush on the cell it would land on.
           const headX = event.absoluteX - stoneHalf;
           const headY = event.absoluteY - carryOffsetY;
           stripX.value = headX;
-          stripY.value = headY;
+          stripY.value = headY - carryVisualLift;
           runOnJS(trayDragged)(event.x, event.translationY, headX, headY);
         })
         .onEnd((event) => {
           runOnJS(trayReleased)(event.absoluteX - stoneHalf, event.absoluteY - carryOffsetY);
         }),
-    [carryOffsetY, stoneHalf, stripX, stripY, trayDragged, trayReleased, trayTouched]
+    [carryOffsetY, carryVisualLift, stoneHalf, stripX, stripY, trayDragged, trayReleased, trayTouched]
   );
 
   const airborneGesture = useMemo(() => {
@@ -263,10 +347,12 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
       .onChange((event) => {
         stripX.value += event.changeX;
         stripY.value += event.changeY;
-        runOnJS(updatePreview)(stripX.value, stripY.value);
+        // stripY is the strip's rendered (visually-lifted) position; undo that
+        // lift to get back the target cell it's actually hovering over.
+        runOnJS(updatePreview)(stripX.value, stripY.value + carryVisualLift);
       })
       .onEnd(() => {
-        runOnJS(commitDrop)(stripX.value, stripY.value);
+        runOnJS(commitDrop)(stripX.value, stripY.value + carryVisualLift);
       });
     const tap = Gesture.Tap()
       .withTestId('airborne-tap')
@@ -275,7 +361,7 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
       });
     // A drag beats a tap, so carrying the stones never reads as a rotation.
     return Gesture.Exclusive(drag, tap);
-  }, [commitDrop, rotateStones, stripX, stripY, updatePreview]);
+  }, [carryVisualLift, commitDrop, rotateStones, stripX, stripY, updatePreview]);
 
   const viewportGesture = useMemo(() => {
     const pan = Gesture.Pan()
@@ -312,6 +398,7 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
   const handleSelectColor = useCallback(
     (color: number) => {
       session.selectColor(color);
+      setColorPickedSignal((value) => value + 1);
     },
     [session]
   );
@@ -339,6 +426,7 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
                   translateX={translateX}
                   translateY={translateY}
                   scale={scale}
+                  showSolution={DEV_TOOLS_ENABLED && showSolution}
                 />
               ) : null}
             </View>
@@ -362,22 +450,70 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
             </View>
           ) : null}
           {!ready ? <View style={styles.loading} testID="board-loading" /> : null}
+
+          {DEV_TOOLS_ENABLED ? (
+            <>
+              <Pressable
+                onPress={() => setDevPanelOpen((open) => !open)}
+                accessibilityRole="button"
+                accessibilityLabel="Dev tools"
+                testID="dev-panel-toggle"
+                style={styles.devButton}
+              >
+                <Text style={styles.devButtonLabel}>🛠</Text>
+              </Pressable>
+              {devPanelOpen ? (
+                <View style={styles.devPanel} testID="dev-panel">
+                  <Pressable
+                    onPress={() => session.completeInstantly()}
+                    accessibilityRole="button"
+                    testID="dev-instant-complete"
+                    style={styles.devPanelRow}
+                  >
+                    <Text style={styles.devPanelLabel}>Instant complete</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setShowSolution((value) => !value)}
+                    accessibilityRole="button"
+                    testID="dev-show-solution"
+                    style={styles.devPanelRow}
+                  >
+                    <Text style={styles.devPanelLabel}>
+                      {showSolution ? 'Hide solution' : 'Show solution'}
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </>
+          ) : null}
         </View>
 
-        <ColorPicker
-          session={session}
-          selected={selection?.color ?? null}
-          onSelect={handleSelectColor}
-        />
+        <View testID="color-picker-row" onLayout={(event) => setColorPickerLayout(event.nativeEvent.layout)}>
+          <ColorPicker
+            session={session}
+            selected={selection?.color ?? null}
+            onSelect={handleSelectColor}
+          />
+        </View>
 
-        <HudTray
-          selection={selection}
-          entry={trayEntry}
-          stones={session.trayStones}
-          count={selection?.count ?? 0}
-          gesture={trayGesture}
-        />
+        <View testID="hud-tray-row" onLayout={(event) => setTrayLayout(event.nativeEvent.layout)}>
+          <HudTray
+            selection={selection}
+            entry={trayEntry}
+            stones={session.trayStones}
+            count={selection?.count ?? 0}
+            gesture={trayGesture}
+          />
+        </View>
 
+        {onboardingSteps ? (
+          <OnboardingOverlay
+            steps={onboardingSteps}
+            onDone={dismissOnboarding}
+            advanceFromStep0={colorPickedSignal}
+            advanceFromStep1={stripLiftedSignal}
+          />
+        ) : null}
       </SafeAreaView>
 
       <AirborneStripView
@@ -447,6 +583,42 @@ const styles = StyleSheet.create({
   completeText: {
     color: '#ffffff',
     fontWeight: '700',
+  },
+  devButton: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.panel,
+    borderWidth: 1,
+    borderColor: theme.panelBorder,
+  },
+  devButtonLabel: {
+    fontSize: 16,
+  },
+  devPanel: {
+    position: 'absolute',
+    bottom: 52,
+    right: 10,
+    backgroundColor: theme.panel,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.panelBorder,
+    paddingVertical: 4,
+    minWidth: 160,
+  },
+  devPanelRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  devPanelLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.text,
   },
 });
 

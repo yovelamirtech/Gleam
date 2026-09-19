@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { LevelCompleteInterstitial } from '../ads/LevelCompleteInterstitial';
 import { LevelCompleteCanvas } from '../components/LevelCompleteCanvas';
 import { LEVEL_CELLS_X, LEVEL_CELLS_Y } from '../constants/board';
 import { globalCellIndex, loadLevelPlacements } from '../game/levelReplay';
@@ -134,6 +135,7 @@ export default function LevelCompleteScreen({ navigation, route }: Props) {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
+      <LevelCompleteInterstitial />
       <Text style={styles.title}>{prepared?.name ?? 'Level complete'}</Text>
       <View style={styles.canvasWrap}>
         {levelCells && orderByCell ? (

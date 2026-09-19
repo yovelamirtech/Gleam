@@ -1,0 +1,13 @@
+{
+  "name": "@gleam/sound-gen",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Generates assets/sounds/*.wav (click, row-complete, board-complete, background music) as synthesized placeholders, with no audio assets or external dependencies needed.",
+  "scripts": {
+    "build": "node make-sounds.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

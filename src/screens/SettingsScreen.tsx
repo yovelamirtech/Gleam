@@ -1,33 +1,38 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useEffect, useState } from 'react';
+import { useAudioPlayer } from 'expo-audio';
+import * as Haptics from 'expo-haptics';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import appConfig from '../../app.json';
+import clickSound from '../../assets/sounds/click.wav';
 import SettingsRow from '../components/SettingsRow';
 import SettingsSection from '../components/SettingsSection';
 import Toggle from '../components/Toggle';
+import { DEV_TOOLS_ENABLED } from '../constants/devTools';
+import { usePurchases } from '../hooks/usePurchases';
+import { useSettings } from '../hooks/useSettings';
 import type { RootStackParamList } from '../navigation/types';
 import { resetProgress } from '../storage/progress';
-import { loadSettings, saveSettings, type Settings } from '../storage/settings';
 import { colors } from '../theme/colors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
-const DEFAULT_SETTINGS: Settings = { soundEnabled: true, musicEnabled: true };
-
 export default function SettingsScreen({ navigation }: Props) {
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const { settings, updateSettings } = useSettings();
+  const { adsRemoved, removeAdsPrice, buyRemoveAds, restore } = usePurchases();
   const insets = useSafeAreaInsets();
+  // Deliberately not gated by settings.soundEnabled: this is the one sound
+  // that confirms a toggle just switched something on, so it needs to be
+  // audible even when what it's confirming is "sound was off, now it's on".
+  const confirmSound = useAudioPlayer(clickSound);
 
-  useEffect(() => {
-    loadSettings().then(setSettings);
-  }, []);
-
-  function update(patch: Partial<Settings>) {
-    const next = { ...settings, ...patch };
-    setSettings(next);
-    saveSettings(next);
+  /** Feedback for turning a toggle on - nothing when turning one off. */
+  function confirmToggleOn(value: boolean) {
+    if (!value) return;
+    confirmSound.seekTo(0);
+    confirmSound.play();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }
 
   function handleResetProgress() {
@@ -63,8 +68,12 @@ export default function SettingsScreen({ navigation }: Props) {
             label="Sound effects"
             right={
               <Toggle
+                testID="toggle-sound"
                 value={settings.soundEnabled}
-                onValueChange={(value) => update({ soundEnabled: value })}
+                onValueChange={(value) => {
+                  updateSettings({ soundEnabled: value });
+                  confirmToggleOn(value);
+                }}
               />
             }
           />
@@ -72,16 +81,39 @@ export default function SettingsScreen({ navigation }: Props) {
             label="Music"
             right={
               <Toggle
+                testID="toggle-music"
                 value={settings.musicEnabled}
-                onValueChange={(value) => update({ musicEnabled: value })}
+                onValueChange={(value) => {
+                  updateSettings({ musicEnabled: value });
+                  confirmToggleOn(value);
+                }}
               />
             }
           />
         </SettingsSection>
 
+        <SettingsSection title="Ads">
+          {adsRemoved ? (
+            <SettingsRow label="Ads removed" right={<Text style={styles.value}>✓</Text>} />
+          ) : (
+            <SettingsRow
+              label="Remove ads"
+              onPress={buyRemoveAds}
+              right={<Text style={styles.value}>{removeAdsPrice ?? '…'}</Text>}
+            />
+          )}
+          {!adsRemoved && <SettingsRow label="Restore purchases" onPress={restore} />}
+        </SettingsSection>
+
         <SettingsSection title="About">
           <SettingsRow label={appConfig.expo.name} right={<Text style={styles.value}>v{appConfig.expo.version}</Text>} />
         </SettingsSection>
+
+        {DEV_TOOLS_ENABLED ? (
+          <SettingsSection title="Developer">
+            <SettingsRow label="Dev tools" onPress={() => navigation.navigate('DevTools')} />
+          </SettingsSection>
+        ) : null}
 
         <Pressable style={styles.dangerButton} onPress={handleResetProgress}>
           <Text style={styles.dangerButtonText}>Reset progress</Text>

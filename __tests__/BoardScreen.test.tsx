@@ -21,6 +21,15 @@ jest.mock('../src/components/BoardCanvas', () => {
   };
 });
 
+// StoneIcon (the tray/airborne stone's own tiny Skia canvas) needs the same
+// native surface BoardCanvas does, for the same reason.
+jest.mock('../src/components/StoneIcon', () => {
+  const { View } = require('react-native');
+  return {
+    StoneIcon: (props: { hex: string; size: number }) => <View testID="stone-icon" {...props} />,
+  };
+});
+
 // 0 0 0 0 0 0
 // 1 1 1 1 1 1
 const board = makeBoard(['000000', '111111'], 'level-1/board-test');
@@ -155,6 +164,35 @@ describe('dragging the tray', () => {
     ]);
 
     await waitFor(() => expect(screen.getByTestId('airborne-strip')).toBeTruthy());
+    expect(screen.getByTestId('board-progress')).toHaveTextContent('0 / 12');
+  });
+
+  it('keeps stones already in the air instead of losing them to a fresh tray touch', async () => {
+    await renderBoard();
+    fireEvent.press(screen.getByTestId('color-1'));
+
+    // Lift the stones, then drop them somewhere that doesn't fit (over the
+    // HUD) - identical to "leaves the stones hanging" above.
+    fireGestureHandler(getByGestureTestId('tray-pan'), [
+      { state: State.BEGAN, x: 55, y: 20, absoluteX: 55, absoluteY: 700, translationY: 0 },
+      { state: State.ACTIVE, x: 55, y: 20, absoluteX: 55, absoluteY: 700, translationY: 0 },
+      { state: State.ACTIVE, x: 55, y: -60, absoluteX: 55, absoluteY: 620, translationY: -80 },
+      { state: State.END, x: 55, y: -60, absoluteX: 55, absoluteY: 620, translationY: -80 },
+    ]);
+    await waitFor(() => expect(screen.getByTestId('airborne-strip')).toBeTruthy());
+    const detailBefore = screen.getByTestId('tray-detail').props.children;
+
+    // Touching the tray again - as if reaching to take a stone - used to
+    // silently overwrite the strip still hanging in the air with a fresh one.
+    fireGestureHandler(getByGestureTestId('tray-pan'), [
+      { state: State.BEGAN, x: 10, y: 20, absoluteX: 10, absoluteY: 700, translationY: 0 },
+      { state: State.ACTIVE, x: 10, y: -60, absoluteX: 10, absoluteY: 620, translationY: -80 },
+      { state: State.END, x: 10, y: -60, absoluteX: 10, absoluteY: 620, translationY: -80 },
+    ]);
+
+    // Nothing changed: still airborne, still the same count as before.
+    expect(screen.getByTestId('airborne-strip')).toBeTruthy();
+    expect(screen.getByTestId('tray-detail').props.children).toEqual(detailBefore);
     expect(screen.getByTestId('board-progress')).toHaveTextContent('0 / 12');
   });
 

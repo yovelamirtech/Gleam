@@ -1,4 +1,4 @@
-import { TRAY_SLOTS, cellIndex, otherOrientation, stripCells } from './geometry';
+import { TRAY_SLOTS, cellIndex, cellRow, otherOrientation, stripCells } from './geometry';
 import type {
   AirborneStrip,
   BoardData,
@@ -171,6 +171,30 @@ export class BoardSession {
     return this.history.length === this.board.cells.length;
   }
 
+  /**
+   * Dev tool: fill every still-empty cell with its required colour at once,
+   * in row-major order, as one batch (a single `emit()`, not one per cell —
+   * the same reasoning as `restoreProgress`). Whatever was airborne or
+   * selected is dropped, since there is nothing left on the board to place.
+   */
+  completeInstantly(at: number = Date.now()): void {
+    let changed = false;
+    for (let cell = 0; cell < this.board.cells.length; cell += 1) {
+      if (this.colorByCell[cell] !== -1) continue;
+      const color = this.board.cells[cell];
+      const placement: Placement = { cell, color, order: this.nextOrder, at };
+      this.nextOrder += 1;
+      this.colorByCell[cell] = color;
+      this.orderByCell[cell] = placement.order;
+      this.placedPerColor[color] += 1;
+      this.history.push(placement);
+      changed = true;
+    }
+    this.airborne = null;
+    this.selection = null;
+    if (changed) this.emit();
+  }
+
   // --- tray ---------------------------------------------------------------
 
   get traySelection(): TraySelection | null {
@@ -307,8 +331,31 @@ export class BoardSession {
     this.airborne = null;
     if (this.selection && this.remainingFor(this.selection.color) <= 0) this.selection = null;
 
+    const completedRows = this.rowsCompletedBy(cells);
+
     this.emit();
-    return { ok: true, placements };
+    return { ok: true, placements, completedRows };
+  }
+
+  /**
+   * Rows a just-placed strip finished off, for a "row complete" sound/haptic.
+   * Only checks the rows the new cells actually touch, not the whole board.
+   */
+  private rowsCompletedBy(cells: number[]): number[] {
+    const rows = new Set(cells.map((cell) => cellRow(cell, this.board.width)));
+    const completed: number[] = [];
+    for (const row of rows) {
+      let full = true;
+      const start = row * this.board.width;
+      for (let col = 0; col < this.board.width; col += 1) {
+        if (this.colorByCell[start + col] === -1) {
+          full = false;
+          break;
+        }
+      }
+      if (full) completed.push(row);
+    }
+    return completed;
   }
 
   // --- persistence --------------------------------------------------------

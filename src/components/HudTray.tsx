@@ -4,9 +4,10 @@ import { GestureDetector } from 'react-native-gesture-handler';
 
 import { TRAY_SLOTS } from '../game/geometry';
 import type { PaletteEntry, TraySelection } from '../game/types';
-import { darken, lighten } from '../ui/colors';
+import { lighten } from '../ui/colors';
 import { theme } from '../ui/theme';
 import { fillExtent, type TrayMetrics } from '../ui/trayGesture';
+import { StoneIcon } from './StoneIcon';
 
 export const TRAY_SLOT = 40;
 export const TRAY_GAP = 5;
@@ -58,19 +59,8 @@ export function HudTray({ selection, entry, stones, count, gesture }: Props) {
           {Array.from({ length: TRAY_SLOTS }, (_, index) => {
             const present = index < stones;
             return (
-              <View
-                key={index}
-                testID={`tray-stone-${index + 1}`}
-                style={[
-                  styles.slot,
-                  present
-                    ? { backgroundColor: hex, borderColor: darken(hex, 0.28) }
-                    : styles.slotEmpty,
-                ]}
-              >
-                {present ? (
-                  <View style={[styles.gleam, { backgroundColor: lighten(hex, 0.6) }]} />
-                ) : null}
+              <View key={index} testID={`tray-stone-${index + 1}`} style={styles.slot}>
+                {present ? <StoneIcon hex={hex} size={TRAY_SLOT} /> : null}
               </View>
             );
           })}
@@ -118,21 +108,8 @@ const styles = StyleSheet.create({
   slot: {
     width: TRAY_SLOT,
     height: TRAY_SLOT,
-    borderRadius: 9,
-    borderWidth: 2,
-  },
-  slotEmpty: {
-    backgroundColor: 'transparent',
-    borderColor: 'transparent',
-  },
-  gleam: {
-    position: 'absolute',
-    top: 5,
-    left: 5,
-    width: TRAY_SLOT * 0.3,
-    height: TRAY_SLOT * 0.22,
-    borderRadius: TRAY_SLOT * 0.15,
-    opacity: 0.85,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   meta: {
     flex: 1,

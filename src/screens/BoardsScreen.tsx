@@ -4,6 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BannerAdBox } from '../ads/BannerAdBox';
 import SettingsButton from '../components/SettingsButton';
 import { BOARDS_PER_LEVEL, BOARDS_X, BOARDS_Y, BOARD_CELLS_X, BOARD_CELLS_Y } from '../constants/board';
 import { preparedLevelFor } from '../game/levels';
@@ -43,7 +44,7 @@ export default function BoardsScreen({ navigation, route }: Props) {
   const artworkScale = tileSize / PREVIEW_BOARD_PX;
 
   return (
-    <View style={[styles.screen, { paddingBottom: insets.bottom }]}>
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>{prepared?.name ?? `Level ${levelId + 1}`}</Text>
@@ -100,6 +101,9 @@ export default function BoardsScreen({ navigation, route }: Props) {
             </Pressable>
           );
         })}
+      </View>
+      <View style={{ paddingBottom: insets.bottom }}>
+        <BannerAdBox />
       </View>
     </View>
   );
