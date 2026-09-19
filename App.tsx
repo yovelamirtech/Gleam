@@ -8,6 +8,7 @@ import type { RootStackParamList } from './src/navigation/types';
 import BoardRoute from './src/screens/BoardRoute';
 import BoardsScreen from './src/screens/BoardsScreen';
 import LevelsScreen from './src/screens/LevelsScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 import { colors } from './src/theme/colors';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -26,6 +27,7 @@ export default function App() {
             <Stack.Screen name="Levels" component={LevelsScreen} />
             <Stack.Screen name="Boards" component={BoardsScreen} />
             <Stack.Screen name="Board" component={BoardRoute} />
+            <Stack.Screen name="Settings" component={SettingsScreen} options={{ presentation: 'modal' }} />
           </Stack.Navigator>
         </NavigationContainer>
         <StatusBar style="dark" />

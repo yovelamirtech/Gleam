@@ -1,8 +1,10 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import SettingsButton from '../components/SettingsButton';
 import { BOARDS_PER_LEVEL, BOARDS_X, BOARDS_Y, BOARD_CELLS_X, BOARD_CELLS_Y } from '../constants/board';
 import { preparedLevelFor } from '../game/levels';
 import type { RootStackParamList } from '../navigation/types';
@@ -28,9 +30,13 @@ export default function BoardsScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const prepared = preparedLevelFor(levelId);
 
-  useEffect(() => {
-    loadProgress().then(setProgress);
-  }, []);
+  // Reloaded on every focus, not just on mount, so returning from a board
+  // (or a progress reset in Settings) shows this wall's current unlock state.
+  useFocusEffect(
+    useCallback(() => {
+      loadProgress().then(setProgress);
+    }, [])
+  );
 
   const gutter = 6;
   const tileSize = Math.floor((width - 32 - gutter * (BOARDS_X - 1)) / BOARDS_X);
@@ -38,8 +44,13 @@ export default function BoardsScreen({ navigation, route }: Props) {
 
   return (
     <View style={[styles.screen, { paddingBottom: insets.bottom }]}>
-      <Text style={styles.title}>{prepared?.name ?? `Level ${levelId + 1}`}</Text>
-      <Text style={styles.subtitle}>48 boards. Finish one to open its neighbours.</Text>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.title}>{prepared?.name ?? `Level ${levelId + 1}`}</Text>
+          <Text style={styles.subtitle}>48 boards. Finish one to open its neighbours.</Text>
+        </View>
+        <SettingsButton onPress={() => navigation.navigate('Settings')} />
+      </View>
 
       <View style={[styles.grid, { gap: gutter }]}>
         {Array.from({ length: BOARDS_PER_LEVEL }, (_, boardId) => {
@@ -96,6 +107,11 @@ export default function BoardsScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, padding: 16 },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
   title: { fontSize: 24, fontWeight: '700', color: colors.text },
   subtitle: { fontSize: 14, color: colors.textMuted, marginTop: 4, marginBottom: 20 },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },

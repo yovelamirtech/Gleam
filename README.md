@@ -58,9 +58,12 @@ src/
     viewport.ts            pan/zoom maths, canvas <-> cell conversion
     trayGesture.ts         the tray swipe: stone under the finger, pull-to-lift
     colors.ts, theme.ts, font.ts
-  components/            BoardCanvas (Skia), HudTray, AirborneStrip, ColorPicker
-  screens/               LevelsScreen, BoardsScreen, BoardScreen, BoardRoute
+  components/            BoardCanvas (Skia), HudTray, AirborneStrip, ColorPicker,
+                            SettingsButton/Section/Row, Toggle
+  screens/               LevelsScreen, BoardsScreen, BoardScreen, BoardRoute,
+                            SettingsScreen
   storage/progress.ts    AsyncStorage progress for the levels and boards screens
+  storage/settings.ts    AsyncStorage sound/music preferences
   constants/board.ts     grid sizes from the build plan
   navigation/types.ts    route params
 tools/prep-images/       turns source images into level grids
@@ -91,6 +94,13 @@ have prepared art:
 - Finishing a board calls `markBoardCompleted` in `src/storage/progress.ts`,
   which unlocks the boards touching it, and unlocks the neighbouring levels
   once every board in a level is done.
+
+The settings screen (gear icon on the levels and boards walls) has a
+sound/music toggle pair, an about row and a reset-progress button; the two
+toggles just persist a preference for now; there is no sound or music engine
+yet to read them. The board screen does not have its own gear icon yet, since
+it is already dense with the exit button and the progress counter — reachable
+through the levels/boards wall behind it in the meantime.
 
 ## Preparing levels
 
