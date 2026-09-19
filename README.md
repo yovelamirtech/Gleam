@@ -51,6 +51,7 @@ src/
     placeholderBoard.ts    generated board data, until levels are loaded
     persistence.ts         AsyncStorage save/load of one board's progress
     replay.ts              ordering for the level-complete redraw
+    levels/sampleLagoon.ts  the one prepared level, read out of assets/levels/
   ui/                    drawing and layout helpers
     drawStone.ts           faux-3D stone: gradient, facet, highlight, shadow
     viewport.ts            pan/zoom maths, canvas <-> cell conversion
@@ -77,14 +78,15 @@ placement order kept for the level-complete replay.
 The levels screen and the 8x6 board grid around it are placeholders that
 navigate but carry no artwork.
 
-Two seams are left open where the three strands meet:
+The two seams where the three strands meet are closed for the one level that
+has prepared art:
 
-- `src/screens/BoardRoute.tsx` still generates its board instead of reading the
-  real level JSON out of `assets/levels/`.
-- Board completion is saved per board by `src/game/persistence.ts`, while the
-  levels and boards screens read the separate store in
-  `src/storage/progress.ts`, so finishing a board does not yet unlock its
-  neighbours.
+- `src/screens/BoardRoute.tsx` reads level 0 out of `assets/levels/sample-lagoon`
+  (`src/game/levels/sampleLagoon.ts`); every other level id still falls back to
+  a generated placeholder board until its own source image is prepared.
+- Finishing a board calls `markBoardCompleted` in `src/storage/progress.ts`,
+  which unlocks the boards touching it, and unlocks the neighbouring levels
+  once every board in a level is done.
 
 ## Preparing levels
 
