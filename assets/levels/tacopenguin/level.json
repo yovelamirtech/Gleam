@@ -1,0 +1,936 @@
+{
+  "formatVersion": 1,
+  "id": "tacopenguin",
+  "name": "Tacopenguin",
+  "source": {
+    "file": "TacoPenguin.jfif",
+    "width": 1200,
+    "height": 896,
+    "format": "jpeg"
+  },
+  "generatedBy": "tools/prep-images",
+  "grid": {
+    "boardCols": 8,
+    "boardRows": 6,
+    "boardWidth": 40,
+    "boardHeight": 40,
+    "levelWidth": 320,
+    "levelHeight": 240,
+    "boardCount": 48
+  },
+  "startBoardId": 19,
+  "preview": "preview.png",
+  "palette": [
+    {
+      "index": 0,
+      "number": 1,
+      "hex": "#030202",
+      "rgb": [
+        3,
+        2,
+        2
+      ],
+      "count": 2377
+    },
+    {
+      "index": 1,
+      "number": 2,
+      "hex": "#1b1614",
+      "rgb": [
+        27,
+        22,
+        20
+      ],
+      "count": 789
+    },
+    {
+      "index": 2,
+      "number": 3,
+      "hex": "#312523",
+      "rgb": [
+        49,
+        37,
+        35
+      ],
+      "count": 1629
+    },
+    {
+      "index": 3,
+      "number": 4,
+      "hex": "#313331",
+      "rgb": [
+        49,
+        51,
+        49
+      ],
+      "count": 1964
+    },
+    {
+      "index": 4,
+      "number": 5,
+      "hex": "#554c38",
+      "rgb": [
+        85,
+        76,
+        56
+      ],
+      "count": 764
+    },
+    {
+      "index": 5,
+      "number": 6,
+      "hex": "#c9332c",
+      "rgb": [
+        201,
+        51,
+        44
+      ],
+      "count": 1205
+    },
+    {
+      "index": 6,
+      "number": 7,
+      "hex": "#256eb0",
+      "rgb": [
+        37,
+        110,
+        176
+      ],
+      "count": 197
+    },
+    {
+      "index": 7,
+      "number": 8,
+      "hex": "#458555",
+      "rgb": [
+        69,
+        133,
+        85
+      ],
+      "count": 605
+    },
+    {
+      "index": 8,
+      "number": 9,
+      "hex": "#878787",
+      "rgb": [
+        135,
+        135,
+        135
+      ],
+      "count": 294
+    },
+    {
+      "index": 9,
+      "number": 10,
+      "hex": "#c39552",
+      "rgb": [
+        195,
+        149,
+        82
+      ],
+      "count": 2357
+    },
+    {
+      "index": 10,
+      "number": 11,
+      "hex": "#abaeb2",
+      "rgb": [
+        171,
+        174,
+        178
+      ],
+      "count": 642
+    },
+    {
+      "index": 11,
+      "number": 12,
+      "hex": "#f5b22e",
+      "rgb": [
+        245,
+        178,
+        46
+      ],
+      "count": 1223
+    },
+    {
+      "index": 12,
+      "number": 13,
+      "hex": "#efc47b",
+      "rgb": [
+        239,
+        196,
+        123
+      ],
+      "count": 1692
+    },
+    {
+      "index": 13,
+      "number": 14,
+      "hex": "#d3dbdf",
+      "rgb": [
+        211,
+        219,
+        223
+      ],
+      "count": 928
+    },
+    {
+      "index": 14,
+      "number": 15,
+      "hex": "#ffffff",
+      "rgb": [
+        255,
+        255,
+        255
+      ],
+      "count": 60134
+    }
+  ],
+  "boards": [
+    {
+      "id": 0,
+      "col": 0,
+      "row": 0,
+      "file": "boards/000.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 1,
+      "col": 1,
+      "row": 0,
+      "file": "boards/001.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 2,
+      "col": 2,
+      "row": 0,
+      "file": "boards/002.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 3,
+      "col": 3,
+      "row": 0,
+      "file": "boards/003.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        7,
+        8,
+        9,
+        10,
+        12,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 4,
+      "col": 4,
+      "row": 0,
+      "file": "boards/004.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        7,
+        8,
+        9,
+        10,
+        12,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 5,
+      "col": 5,
+      "row": 0,
+      "file": "boards/005.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 6,
+      "col": 6,
+      "row": 0,
+      "file": "boards/006.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 7,
+      "col": 7,
+      "row": 0,
+      "file": "boards/007.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 8,
+      "col": 0,
+      "row": 1,
+      "file": "boards/008.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 9,
+      "col": 1,
+      "row": 1,
+      "file": "boards/009.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 10,
+      "col": 2,
+      "row": 1,
+      "file": "boards/010.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8,
+        10,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 11,
+      "col": 3,
+      "row": 1,
+      "file": "boards/011.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 12,
+      "col": 4,
+      "row": 1,
+      "file": "boards/012.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 13,
+      "col": 5,
+      "row": 1,
+      "file": "boards/013.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 14,
+      "col": 6,
+      "row": 1,
+      "file": "boards/014.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 15,
+      "col": 7,
+      "row": 1,
+      "file": "boards/015.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 16,
+      "col": 0,
+      "row": 2,
+      "file": "boards/016.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 17,
+      "col": 1,
+      "row": 2,
+      "file": "boards/017.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 18,
+      "col": 2,
+      "row": 2,
+      "file": "boards/018.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 19,
+      "col": 3,
+      "row": 2,
+      "file": "boards/019.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 20,
+      "col": 4,
+      "row": 2,
+      "file": "boards/020.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 21,
+      "col": 5,
+      "row": 2,
+      "file": "boards/021.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        7,
+        8,
+        9,
+        10,
+        12,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 22,
+      "col": 6,
+      "row": 2,
+      "file": "boards/022.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 23,
+      "col": 7,
+      "row": 2,
+      "file": "boards/023.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 24,
+      "col": 0,
+      "row": 3,
+      "file": "boards/024.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 25,
+      "col": 1,
+      "row": 3,
+      "file": "boards/025.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 26,
+      "col": 2,
+      "row": 3,
+      "file": "boards/026.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        7,
+        8,
+        10,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 27,
+      "col": 3,
+      "row": 3,
+      "file": "boards/027.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        7,
+        8,
+        10,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 28,
+      "col": 4,
+      "row": 3,
+      "file": "boards/028.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 29,
+      "col": 5,
+      "row": 3,
+      "file": "boards/029.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 30,
+      "col": 6,
+      "row": 3,
+      "file": "boards/030.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 31,
+      "col": 7,
+      "row": 3,
+      "file": "boards/031.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 32,
+      "col": 0,
+      "row": 4,
+      "file": "boards/032.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 33,
+      "col": 1,
+      "row": 4,
+      "file": "boards/033.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 34,
+      "col": 2,
+      "row": 4,
+      "file": "boards/034.json",
+      "colors": [
+        0,
+        1,
+        3,
+        4,
+        8,
+        10,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 35,
+      "col": 3,
+      "row": 4,
+      "file": "boards/035.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        7,
+        8,
+        10,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 36,
+      "col": 4,
+      "row": 4,
+      "file": "boards/036.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        8,
+        10,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 37,
+      "col": 5,
+      "row": 4,
+      "file": "boards/037.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        7,
+        8,
+        10,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 38,
+      "col": 6,
+      "row": 4,
+      "file": "boards/038.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 39,
+      "col": 7,
+      "row": 4,
+      "file": "boards/039.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 40,
+      "col": 0,
+      "row": 5,
+      "file": "boards/040.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 41,
+      "col": 1,
+      "row": 5,
+      "file": "boards/041.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 42,
+      "col": 2,
+      "row": 5,
+      "file": "boards/042.json",
+      "colors": [
+        10,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 43,
+      "col": 3,
+      "row": 5,
+      "file": "boards/043.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10,
+        11,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 44,
+      "col": 4,
+      "row": 5,
+      "file": "boards/044.json",
+      "colors": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        8,
+        9,
+        10,
+        11,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 45,
+      "col": 5,
+      "row": 5,
+      "file": "boards/045.json",
+      "colors": [
+        10,
+        13,
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 46,
+      "col": 6,
+      "row": 5,
+      "file": "boards/046.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    },
+    {
+      "id": 47,
+      "col": 7,
+      "row": 5,
+      "file": "boards/047.json",
+      "colors": [
+        14
+      ],
+      "stoneCount": 1600
+    }
+  ]
+}

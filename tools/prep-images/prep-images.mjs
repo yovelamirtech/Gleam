@@ -24,7 +24,7 @@ import { buildLevel } from './src/level.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_OUT = path.resolve(HERE, '../../assets/levels');
-const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.tiff', '.tif', '.gif', '.avif']);
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.jfif', '.webp', '.tiff', '.tif', '.gif', '.avif']);
 
 class UsageError extends Error {}
 
