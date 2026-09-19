@@ -7,7 +7,9 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { RootStackParamList } from './src/navigation/types';
 import BoardRoute from './src/screens/BoardRoute';
 import BoardsScreen from './src/screens/BoardsScreen';
+import LevelCompleteScreen from './src/screens/LevelCompleteScreen';
 import LevelsScreen from './src/screens/LevelsScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 import { colors } from './src/theme/colors';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -26,6 +28,12 @@ export default function App() {
             <Stack.Screen name="Levels" component={LevelsScreen} />
             <Stack.Screen name="Boards" component={BoardsScreen} />
             <Stack.Screen name="Board" component={BoardRoute} />
+            <Stack.Screen
+              name="LevelComplete"
+              component={LevelCompleteScreen}
+              options={{ gestureEnabled: false }}
+            />
+            <Stack.Screen name="Settings" component={SettingsScreen} options={{ presentation: 'modal' }} />
           </Stack.Navigator>
         </NavigationContainer>
         <StatusBar style="dark" />

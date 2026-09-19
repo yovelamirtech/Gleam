@@ -10,4 +10,6 @@ export const colors = {
   locked: '#E7ECF3',
   completed: '#7ED9A6',
   gridLine: '#E3E9F1',
+  textFaint: '#AEB9C4',
+  danger: '#E4574C',
 } as const;

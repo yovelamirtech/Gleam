@@ -1,0 +1,16 @@
+{
+  "name": "@gleam/app-icon",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Generates assets/icon.png and the Android adaptive/monochrome/favicon variants from code, so the icon's palette always matches src/theme/colors.ts and src/ui/drawStone.ts.",
+  "scripts": {
+    "build": "node make-icons.mjs"
+  },
+  "dependencies": {
+    "sharp": "^0.35.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
