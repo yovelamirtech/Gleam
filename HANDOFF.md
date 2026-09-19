@@ -42,25 +42,40 @@ technical writeup of each:
    implemented — only vanish/reappear themselves are.
 7. **In-game stones restyled to match the icon** — `src/ui/drawStone.ts`
    now draws the same faceted-rhinestone shape as the app icon (8 wedges
-   instead of the icon's 12, for cell-scale draw-call cost). See "Next up"
-   below — not profiled on a real device yet.
+   instead of the icon's 12, for cell-scale draw-call cost). Not profiled
+   on a real device yet.
+8. **Opening screens** — `SplashScreen` (the studio wordmark, then an
+   auto-transition) and `TapToStartScreen` (the game's own icon, tap to
+   enter the levels wall). See "Next up" below for what's unfinished here.
 
-All of the above is on branch `claude/affectionate-cannon-z4do8h`
-(PR #8, covering items 1-6, is merged into `main`; item 7 is this
-session's addition, not yet in its own PR when this note was last
-edited). `npm run typecheck` and `npm test` are both clean as of this
-file's last edit (167+ tests).
+All of the above is on branch `claude/affectionate-cannon-z4do8h`. PR #8
+(items 1-6) and PR #9 (item 7) are both merged into `main`; item 8 is
+this session's addition, not yet in its own PR when this note was last
+edited. `npm run typecheck` and `npm test` are both clean as of this
+file's last edit (170+ tests).
 
 ## Next up, in BUILD_PLAN.md order
 
-1. **Opening screens** (מסכי פתיחה וניווט) — splash with the studio logo ->
-   "Tap to Start" with the game's own symbol. **Blocked on the user**: they
-   said they'll upload the studio logo file "later" (session where this
-   file was written) — check with them before starting this, don't invent
-   a placeholder logo. The game's own "Tap to Start" symbol can reuse the
-   app-icon rhinestone (see `tools/app-icon/`) — now that the in-game
-   stone restyle (item 2 below) has landed, it won't visually contradict
-   the in-game look.
+1. ~~**Opening screens**~~ mostly done, one loose end — the user provided
+   the studio logo as `assets/studio_logo/wordmark.svg` (plus two square
+   icon variants, `icon-primary.svg`/`icon-appstore.svg`, not used
+   in-app — they read as app-store-listing assets, not a splash asset;
+   revisit if the user says otherwise). It's rasterized once, at build
+   time, to `assets/studio_logo/wordmark.png` (2x the SVG's 720x200
+   viewBox, transparent background) the same way `tools/app-icon`
+   rasterizes its own SVG — there's no SVG-rendering library in the app
+   itself (no `react-native-svg`), so this keeps it that way rather than
+   adding one for a single static logo. If the user replaces
+   `wordmark.svg` later, re-render it the same way (see the git history
+   of this file for the one-off script; it wasn't kept as a
+   `tools/`-style reusable script since this asset doesn't change often).
+   `SplashScreen` shows it for 1.4s then auto-`replace`s to
+   `TapToStartScreen`, which shows the existing `assets/icon.png`
+   (already on the same `colors.background` as the app, so no extra
+   asset needed) and `replace`s to `Levels` on tap. **Not checked on a
+   real device** — is 1.4s the right splash duration, does the wordmark
+   size/position read well on an actual phone, etc. Nothing else in
+   מסכי פתיחה וניווט is outstanding (Levels/Board/Settings all exist).
 2. ~~**Restyle the in-game stones to match the icon**~~ done —
    `src/ui/drawStone.ts` now draws the same shape language as
    `tools/app-icon/make-icons.mjs`'s `rhinestone()`: a ring of trapezoid
