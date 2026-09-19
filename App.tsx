@@ -3,9 +3,9 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import MobileAds from 'react-native-google-mobile-ads';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import googleMobileAds from './src/ads/googleMobileAds';
 import { BackgroundMusic } from './src/audio/BackgroundMusic';
 import { FpsOverlay } from './src/components/FpsOverlay';
 import { DEV_TOOLS_ENABLED } from './src/constants/devTools';
@@ -35,7 +35,7 @@ function DevFpsOverlay() {
 
 export default function App() {
   useEffect(() => {
-    MobileAds().initialize();
+    googleMobileAds?.default().initialize();
   }, []);
 
   return (

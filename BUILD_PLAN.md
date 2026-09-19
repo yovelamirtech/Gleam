@@ -105,7 +105,7 @@ Gleam הוא משחק דיאמונד פיינטינג למובייל (Expo / Rea
 - רשת הפרסומות: **AdMob**
 - **אין** התראות push בפרויקט
 
-**עדכון:** בוצע — `react-native-google-mobile-ads` (באנר + interstitial) ו-`expo-iap` (רכישה חד-פעמית, לא `expo-in-app-purchases` שכבר deprecated). **שני אלה מודולי native**: `expo start` הרגיל (Expo Go) כבר לא יעבוד לאפליקציה הזו — צריך Expo Dev Client דרך EAS Build (`eas.json` נוסף עם פרופיל `development`). ר' HANDOFF.md לפרטים ולצעדים שנשארו לפני build אמיתי (bundle identifier / AdMob אמיתי / IAP product). הבאנר מוצג בתחתית מסכי Levels ו-Boards (לא במסך המשחק עצמו, כדי לא להתחרות עם הקנבס); ה-interstitial מוצג פעם אחת בכל כניסה ל-`LevelCompleteScreen` (סיום level שלם, לא כל board). "הסר פרסומות" ו"שחזר רכישות" ב-`SettingsScreen`.
+**עדכון:** בוצע — `react-native-google-mobile-ads` (באנר + interstitial) ו-`expo-iap` (רכישה חד-פעמית, לא `expo-in-app-purchases` שכבר deprecated). שני אלה מודולי native, אבל עטופים כך ש-`expo start` הרגיל (Expo Go) **ממשיך לעבוד** לכל שאר האפליקציה — רק הפרסומות עצמן לא נטענות שם (ר' HANDOFF.md, "Ads/IAP and plain Expo Go"); כדי לראות פרסומות/רכישה אמיתיות בפועל עדיין צריך Expo Dev Client דרך EAS Build (`eas.json` נוסף עם פרופיל `development`, ור' HANDOFF.md לצעדים שנשארו — bundle identifier / חשבון AdMob אמיתי / IAP product). הבאנר מוצג בתחתית מסכי Levels ו-Boards (לא במסך המשחק עצמו, כדי לא להתחרות עם הקנבס); ה-interstitial מוצג פעם אחת בכל כניסה ל-`LevelCompleteScreen` (סיום level שלם, לא כל board). "הסר פרסומות" ו"שחזר רכישות" ב-`SettingsScreen`.
 
 ## צלילים ומוזיקה
 

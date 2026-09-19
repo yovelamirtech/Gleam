@@ -130,16 +130,47 @@ All of the above is on branch `claude/affectionate-cannon-z4do8h`. PR #8
 (items 1-6) is merged into `main`; PR #9 (items 7-11) is open; item 12 is
 this session's addition, not yet pushed to that PR when this note was
 last edited. `npm run typecheck` and `npm test` are both clean as of this
-file's last edit (202 tests).
+file's last edit (205 tests).
+
+## Ads/IAP and plain Expo Go
+
+Item 12 pulled in `react-native-google-mobile-ads` and `expo-iap`, both
+native modules - and `react-native-google-mobile-ads` specifically crashes
+the *whole app on launch* under plain Expo Go, not just its own ad code:
+it calls `TurboModuleRegistry.getEnforcing(...)` at the top of its own
+module, the moment anything imports it, native module or not. A first
+version of this work did `import MobileAds from 'react-native-google-mobile-ads'`
+directly in `App.tsx` and broke Expo Go entirely as a result.
+
+Fixed with one narrow seam: `src/ads/googleMobileAds.ts` is the only place
+that package is required, wrapped in a `try`/`catch`, exporting `null` when
+the native module isn't there. Every other ads file (`BannerAdBox.tsx`,
+`LevelCompleteInterstitial.tsx`, `App.tsx`'s `MobileAds().initialize()`)
+goes through that instead of importing the package directly, and renders/
+does nothing when it's `null`. `src/constants/ads.ts` also stopped
+importing `TestIds` from the package for the same reason - its two test ad
+unit IDs are hardcoded there now, `Platform.select`'d the same way `TestIds`
+itself is internally. `expo-iap` didn't need this: `useIAP`'s own
+`initConnection` call is already wrapped in a try/catch inside the
+package, so a missing store connection just leaves `connected: false`
+rather than crashing.
+
+Net effect: **everything except ads/IAP themselves is still testable
+through plain `npx expo start` + Expo Go** - the board game, all screens,
+sound/music/haptics, dev tools, onboarding. `__tests__/adsUnavailable.test.tsx`
+covers the fallback path directly (mocks the package to throw, same as a
+real missing native module would, and asserts nothing crashes). Ads
+themselves - the banner, the interstitial, the purchase flow - still need
+a real dev client to see rendered; see the next section for what that
+needs.
 
 ## Before you can build a dev client
 
-Item 12 above pulled in `react-native-google-mobile-ads` and `expo-iap`,
-both native modules. **The plain Expo Go app can no longer run this
-project** - `npx expo start` needs a custom **Expo Dev Client** from here
-on. `eas.json` (new, this session) has a `development` build profile ready
-(`developmentClient: true`), but building it needs a few things only you
-can provide, since none of them exist yet:
+`npx expo start` now works fine for Expo Go, but a dev client is still the
+only way to actually *see* ads or exercise the purchase flow, since Expo Go
+can't load that native module at all. `eas.json` (new, this session) has a
+`development` build profile ready (`developmentClient: true`), but building
+it needs a few things only you can provide, since none of them exist yet:
 
 1. **An Expo/EAS account** linked to this project (`eas login`, then `eas
    build:configure` sets `extra.eas.projectId` in `app.json` - not there
