@@ -17,65 +17,76 @@ function darken(hex, amount) {
   return rgbToHex({ r: r * (1 - amount), g: g * (1 - amount), b: b * (1 - amount) });
 }
 
-// Same palette family as the app's own theme (src/theme/colors.ts) and the
-// stones drawn on the board (src/ui/drawStone.ts): light background, blue
-// accent, plus two more hues so the icon reads as a little cluster of
-// diamond-painting stones rather than one plain app-launcher blob.
+// Same accent as the app's own theme (src/theme/colors.ts).
 const BG = '#F5F8FC';
 const ADAPTIVE_BG = '#E6F4FE';
-const HUES = {
-  blue: '#4C9AFF',
-  amber: '#F5A623',
-  mint: '#3FBF8F',
-};
+const ACCENT = '#4C9AFF';
 
 /**
- * One faux-3D gem: a rounded square with a top-left-to-bottom-right
- * gradient, a diagonal facet line and a specular highlight, matching the
- * stones drawn on the board in src/ui/drawStone.ts.
+ * One faceted diamond: a kite outline split into four triangular facets by
+ * its two diagonals, each a flat, distinct shade (not one smooth gradient —
+ * a diamond reads as *cut* because neighbouring facets contrast, the way the
+ * board's own stones don't need to at this size). Light source fixed at the
+ * top-left, same as the rest of the app: that facet is near-white, the
+ * opposite one the darkest.
  */
-function gem({ cx, cy, side, hue, gradientId, rotation = 0, shadow = true, silhouette = false, silhouetteColor = '#ffffff' }) {
-  const left = cx - side / 2;
-  const top = cy - side / 2;
-  const radius = side * 0.22;
-  const transform = rotation ? `rotate(${rotation} ${cx} ${cy})` : undefined;
-  const group = (inner) => (transform ? `<g transform="${transform}">${inner}</g>` : inner);
+function diamond({ cx, cy, width, height, silhouette = false, silhouetteColor = '#ffffff' }) {
+  const hw = width / 2;
+  const top = { x: cx, y: cy - height / 2 };
+  const bottom = { x: cx, y: cy + height / 2 };
+  // The girdle (widest point) sits a bit above vertical centre, like a real
+  // brilliant cut's crown being shorter than its pavilion.
+  const girdleY = cy - height * 0.08;
+  const left = { x: cx - hw, y: girdleY };
+  const right = { x: cx + hw, y: girdleY };
+  const centre = { x: cx, y: girdleY };
+
+  const poly = (...pts) => pts.map((p) => `${p.x},${p.y}`).join(' ');
 
   if (silhouette) {
-    return group(
-      `<rect x="${left}" y="${top}" width="${side}" height="${side}" rx="${radius}" ry="${radius}" fill="${silhouetteColor}" />`
-    );
+    return `<polygon points="${poly(top, right, bottom, left)}" fill="${silhouetteColor}" />`;
   }
 
-  const light = lighten(hue, 0.45);
-  const dark = darken(hue, 0.35);
-  const facet = lighten(hue, 0.25);
-  const shadowRy = side * 0.08;
+  const facets = [
+    { pts: [top, left, centre], fill: lighten(ACCENT, 0.62) }, // top-left: brightest, nearest the light
+    { pts: [top, centre, right], fill: lighten(ACCENT, 0.18) }, // top-right
+    { pts: [left, bottom, centre], fill: ACCENT }, // bottom-left
+    { pts: [centre, bottom, right], fill: darken(ACCENT, 0.42) }, // bottom-right: darkest, furthest from the light
+  ];
+  const edge = darken(ACCENT, 0.55);
+  const shadowRy = height * 0.06;
 
-  return group(`
-    <defs>
-      <linearGradient id="${gradientId}" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="${light}" />
-        <stop offset="55%" stop-color="${hue}" />
-        <stop offset="100%" stop-color="${dark}" />
-      </linearGradient>
-    </defs>
-    ${shadow ? `<ellipse cx="${cx}" cy="${top + side + shadowRy * 0.4}" rx="${side * 0.52}" ry="${shadowRy}" fill="#0f172a" opacity="0.16" />` : ''}
-    <rect x="${left}" y="${top}" width="${side}" height="${side}" rx="${radius}" ry="${radius}" fill="url(#${gradientId})" />
-    <line x1="${left + side * 0.18}" y1="${top + side * 0.82}" x2="${left + side * 0.82}" y2="${top + side * 0.18}"
-          stroke="${facet}" stroke-width="${Math.max(side * 0.045, 1)}" stroke-linecap="round" opacity="0.55" />
-    <ellipse cx="${left + side * 0.29}" cy="${top + side * 0.24}" rx="${side * 0.13}" ry="${side * 0.1}" fill="#ffffff" opacity="0.7" />
-  `);
+  return `
+    <ellipse cx="${cx}" cy="${bottom.y + shadowRy * 0.6}" rx="${width * 0.42}" ry="${shadowRy}" fill="#0f172a" opacity="0.18" />
+    ${facets
+      .map((f) => `<polygon points="${poly(...f.pts)}" fill="${f.fill}" stroke="${edge}" stroke-width="${Math.max(width * 0.012, 1)}" stroke-linejoin="round" />`)
+      .join('\n    ')}
+  `;
 }
 
-/** A small cluster of three gems: two smaller ones behind, one large in front. */
-function cluster({ cx, cy, scale, silhouette = false }) {
-  const back = scale * 0.34;
-  const front = scale * 0.5;
+/** A small four-point sparkle/glint, standing in for the "gleam" the diamond is named for. */
+function sparkle({ cx, cy, r, color = '#ffffff', opacity = 0.95 }) {
+  const k = r * 0.3;
+  const pts = [
+    { x: cx, y: cy - r },
+    { x: cx + k, y: cy - k },
+    { x: cx + r, y: cy },
+    { x: cx + k, y: cy + k },
+    { x: cx, y: cy + r },
+    { x: cx - k, y: cy + k },
+    { x: cx - r, y: cy },
+    { x: cx - k, y: cy - k },
+  ];
+  const points = pts.map((p) => `${p.x},${p.y}`).join(' ');
+  return `<polygon points="${points}" fill="${color}" opacity="${opacity}" />`;
+}
+
+function hero({ cx, cy, scale, silhouette = false }) {
+  const width = scale;
+  const height = scale * 1.2;
   return `
-    ${gem({ cx: cx - scale * 0.24, cy: cy - scale * 0.2, side: back, hue: HUES.amber, gradientId: 'gBack1', rotation: -8, shadow: !silhouette, silhouette, silhouetteColor: silhouette ? '#ffffff' : undefined })}
-    ${gem({ cx: cx + scale * 0.26, cy: cy - scale * 0.16, side: back, hue: HUES.mint, gradientId: 'gBack2', rotation: 10, shadow: !silhouette, silhouette, silhouetteColor: silhouette ? '#ffffff' : undefined })}
-    ${gem({ cx, cy: cy + scale * 0.08, side: front, hue: HUES.blue, gradientId: 'gFront', rotation: 0, shadow: !silhouette, silhouette, silhouetteColor: silhouette ? '#ffffff' : undefined })}
+    ${diamond({ cx, cy, width, height, silhouette, silhouetteColor: '#ffffff' })}
+    ${sparkle({ cx: cx + width * 0.42, cy: cy - height * 0.46, r: scale * 0.09, color: silhouette ? '#ffffff' : '#ffffff', opacity: silhouette ? 1 : 0.9 })}
   `;
 }
 
@@ -83,7 +94,7 @@ function fullIconSvg(size) {
   return `
     <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
       <rect width="${size}" height="${size}" fill="${BG}" />
-      ${cluster({ cx: size / 2, cy: size / 2, scale: size * 0.62 })}
+      ${hero({ cx: size / 2, cy: size / 2, scale: size * 0.5 })}
     </svg>
   `;
 }
@@ -91,10 +102,10 @@ function fullIconSvg(size) {
 function adaptiveForegroundSvg(size) {
   // Android crops an adaptive icon's foreground to a shape (circle, squircle,
   // rounded square...) whose visible area is roughly the inner 66% of the
-  // canvas, so the cluster is sized well inside that to survive every mask.
+  // canvas, so the diamond is sized well inside that to survive every mask.
   return `
     <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
-      ${cluster({ cx: size / 2, cy: size / 2, scale: size * 0.44 })}
+      ${hero({ cx: size / 2, cy: size / 2, scale: size * 0.34 })}
     </svg>
   `;
 }
@@ -109,10 +120,10 @@ function adaptiveBackgroundSvg(size) {
 
 function monochromeSvg(size) {
   // Android 13+ themed icons: a single-color silhouette on a transparent
-  // background, tinted by the OS at runtime, so no gradient or shadow here.
+  // background, tinted by the OS at runtime, so no facets or shadow here.
   return `
     <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
-      ${cluster({ cx: size / 2, cy: size / 2, scale: size * 0.44, silhouette: true })}
+      ${hero({ cx: size / 2, cy: size / 2, scale: size * 0.34, silhouette: true })}
     </svg>
   `;
 }
