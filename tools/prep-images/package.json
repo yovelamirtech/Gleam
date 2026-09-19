@@ -1,0 +1,21 @@
+{
+  "name": "@gleam/prep-images",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Turns source images into Gleam level grids: one palette per image, split into 48 boards of 40x40 cells.",
+  "bin": {
+    "prep-images": "./prep-images.mjs",
+    "verify-level": "./verify-level.mjs"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\"",
+    "verify": "node verify-level.mjs ../../assets/levels/*"
+  },
+  "dependencies": {
+    "sharp": "^0.35.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
