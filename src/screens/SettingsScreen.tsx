@@ -6,6 +6,7 @@ import appConfig from '../../app.json';
 import SettingsRow from '../components/SettingsRow';
 import SettingsSection from '../components/SettingsSection';
 import Toggle from '../components/Toggle';
+import { DEV_TOOLS_ENABLED } from '../constants/devTools';
 import { useSettings } from '../hooks/useSettings';
 import type { RootStackParamList } from '../navigation/types';
 import { resetProgress } from '../storage/progress';
@@ -69,6 +70,12 @@ export default function SettingsScreen({ navigation }: Props) {
         <SettingsSection title="About">
           <SettingsRow label={appConfig.expo.name} right={<Text style={styles.value}>v{appConfig.expo.version}</Text>} />
         </SettingsSection>
+
+        {DEV_TOOLS_ENABLED ? (
+          <SettingsSection title="Developer">
+            <SettingsRow label="Dev tools" onPress={() => navigation.navigate('DevTools')} />
+          </SettingsSection>
+        ) : null}
 
         <Pressable style={styles.dangerButton} onPress={handleResetProgress}>
           <Text style={styles.dangerButtonText}>Reset progress</Text>

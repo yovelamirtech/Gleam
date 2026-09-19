@@ -32,6 +32,8 @@ interface Props {
   translateX: SharedValue<number>;
   translateY: SharedValue<number>;
   scale: SharedValue<number>;
+  /** Dev tool: a small swatch of the true colour in every still-empty cell. */
+  showSolution?: boolean;
 }
 
 /**
@@ -51,6 +53,7 @@ export function BoardCanvas({
   translateX,
   translateY,
   scale,
+  showSolution = false,
 }: Props) {
   const board = session.board;
 
@@ -103,6 +106,27 @@ export function BoardCanvas({
     [session, board, session.stonesPlaced]
   );
 
+  // Dev tool only: a corner swatch of each still-empty cell's true colour, so
+  // a source image can be checked against the level it produced without
+  // solving the board. Rebuilt with the stones, since which cells are still
+  // empty changes with every placement.
+  const solutionPicture = useMemo(() => {
+    if (!showSolution) return null;
+    return createPicture((canvas) => {
+      const swatch = Skia.Paint();
+      swatch.setAntiAlias(true);
+      const swatchSize = CELL * 0.32;
+      for (let index = 0; index < board.cells.length; index += 1) {
+        if (!session.isEmptyAt(index)) continue;
+        const x = cellCol(index, board.width) * CELL;
+        const y = cellRow(index, board.width) * CELL;
+        swatch.setColor(Skia.Color(board.palette[board.cells[index]].hex));
+        canvas.drawRect(Skia.XYWHRect(x + 2, y + 2, swatchSize, swatchSize), swatch);
+      }
+    }, Skia.XYWHRect(0, 0, board.width * CELL, board.height * CELL));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showSolution, session, board, session.stonesPlaced]);
+
   const previewPicture = useMemo(() => {
     if (!preview) return null;
     const cells = stripCells(preview.row, preview.col, preview.count, preview.orientation, board);
@@ -128,6 +152,7 @@ export function BoardCanvas({
     <Canvas style={{ width, height }}>
       <Group transform={transform}>
         <Picture picture={gridPicture} />
+        {solutionPicture ? <Picture picture={solutionPicture} /> : null}
         <Picture picture={stonesPicture} />
         {previewPicture ? <Picture picture={previewPicture} /> : null}
       </Group>

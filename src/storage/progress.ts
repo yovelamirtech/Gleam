@@ -135,6 +135,29 @@ export function markBoardCompleted(progress: Progress, levelId: number, boardId:
   return { ...progress, levels };
 }
 
+/**
+ * Dev tool: unlock every level and every board so any of them can be opened
+ * and played, without touching anything already `completed` (that status,
+ * and whatever placements back it, stays exactly as it was).
+ */
+export function unlockAll(progress: Progress): Progress {
+  const levels: Record<number, LevelProgress> = {};
+  for (let levelId = 0; levelId < LEVEL_COUNT; levelId += 1) {
+    const level = progress.levels[levelId] ?? emptyLevel('locked');
+    const boards: Record<number, BoardProgress> = { ...level.boards };
+    for (let boardId = 0; boardId < BOARDS_PER_LEVEL; boardId += 1) {
+      if (statusOf(boards, boardId) === 'locked') {
+        boards[boardId] = { status: 'unlocked', placements: [] };
+      }
+    }
+    levels[levelId] = {
+      status: level.status === 'locked' ? 'unlocked' : level.status,
+      boards,
+    };
+  }
+  return { ...progress, levels };
+}
+
 export async function resetProgress(): Promise<Progress> {
   const fresh = initialProgress();
   await saveProgress(fresh);

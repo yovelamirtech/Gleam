@@ -133,6 +133,8 @@ Gleam הוא משחק דיאמונד פיינטינג למובייל (Expo / Rea
 - הצגת הצבע/מספר הנכון על כל תא (מצב "פתרון" לבדיקת התאמת תמונה)
 - כפתור דילוג מהיר למסך התצוגה הפאוקס-3D בלי מגבלות משחק (לבדיקת עיצוב חופשית)
 
+**עדכון:** בוצע — הכל מאחורי `DEV_TOOLS_ENABLED` (`src/constants/devTools.ts`), שהוא פשוט `__DEV__` של React Native: `false` אוטומטית בכל build של release, בלי צורך להסיר קוד ידנית. תפריט מרכזי `DevToolsScreen` (נגיש משורה ב-`SettingsScreen`, מוצגת רק ב-dev) מכיל: פתיחת כל ה-levels/בורדים (`unlockAll` ב-`src/storage/progress.ts`), קפיצה ישירה ל-level/בורד (steppers), איפוס התקדמות, ומתג FPS overlay (`src/components/FpsOverlay.tsx`, צף מעל כל מסך). "השלמת בורד מידית" (`BoardSession.completeInstantly()`) ו"הצגת פתרון" (prop חדש ב-`BoardCanvas`) יושבים על מסך הבורד עצמו במקום בתפריט המרכזי, כי הם צריכים session חי. גלריית הסגנון הפאוקס-3D החופשית — `DevStoneGalleryScreen`, כל צבעי הפלטה בכמה גדלים, בלי מגבלות משחק. לא נבדק על מכשיר אמיתי.
+
 ## סיכום נקודות פתוחות שדורשות קלט מהמשתמש בהמשך
 
 1. ~~קישור לריפו "Bullseye Words" / "Letter Wheel" — לסגנון מסך ההגדרות וסמל ההגדרות~~ סופק:

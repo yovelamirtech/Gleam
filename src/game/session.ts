@@ -171,6 +171,30 @@ export class BoardSession {
     return this.history.length === this.board.cells.length;
   }
 
+  /**
+   * Dev tool: fill every still-empty cell with its required colour at once,
+   * in row-major order, as one batch (a single `emit()`, not one per cell —
+   * the same reasoning as `restoreProgress`). Whatever was airborne or
+   * selected is dropped, since there is nothing left on the board to place.
+   */
+  completeInstantly(at: number = Date.now()): void {
+    let changed = false;
+    for (let cell = 0; cell < this.board.cells.length; cell += 1) {
+      if (this.colorByCell[cell] !== -1) continue;
+      const color = this.board.cells[cell];
+      const placement: Placement = { cell, color, order: this.nextOrder, at };
+      this.nextOrder += 1;
+      this.colorByCell[cell] = color;
+      this.orderByCell[cell] = placement.order;
+      this.placedPerColor[color] += 1;
+      this.history.push(placement);
+      changed = true;
+    }
+    this.airborne = null;
+    this.selection = null;
+    if (changed) this.emit();
+  }
+
   // --- tray ---------------------------------------------------------------
 
   get traySelection(): TraySelection | null {

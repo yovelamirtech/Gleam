@@ -80,12 +80,28 @@ technical writeup of each:
     chimes, a four-note fanfare, and a seamlessly-looping ambient pad; see
     that tool's README for how the loop avoids any click). Replace them
     with produced audio whenever it's ready; nothing else needs to change.
+11. **Dev tools** — everything behind `DEV_TOOLS_ENABLED`
+    (`src/constants/devTools.ts`, just React Native's own `__DEV__` - false
+    in any release build, nothing to strip by hand). A central
+    `DevToolsScreen` (a "Dev tools" row on `SettingsScreen`, shown only in
+    dev): unlock every level/board (`unlockAll` in `src/storage/progress.ts`),
+    jump straight to any level/board, reset progress, and an FPS overlay
+    toggle (`src/components/FpsOverlay.tsx`, floats over every screen from
+    the `App.tsx` root). Instant-complete
+    (`BoardSession.completeInstantly()`) and the solution overlay (a new
+    `showSolution` prop on `BoardCanvas`, a small colour swatch in every
+    still-empty cell) live on `BoardScreen` itself instead - a small `🛠`
+    button opens a panel with both, since they need a live board session.
+    `DevStoneGalleryScreen` shows every palette colour's stone at a few
+    sizes, free of any board or game state. Covered by
+    `__tests__/devTools.test.tsx` and new cases in `session.test.ts`/
+    `progress.test.ts`; not seen on an actual screen.
 
 All of the above is on branch `claude/affectionate-cannon-z4do8h`. PR #8
-(items 1-6) and PR #9 (items 7-8) are merged into `main`; item 10 is this
-session's addition, not yet in its own PR when this note was last
-edited. `npm run typecheck` and `npm test` are both clean as of this
-file's last edit (182 tests).
+(items 1-6) is merged into `main`; PR #9 (items 7-10) is open; item 11 is
+this session's addition, not yet pushed to that PR when this note was
+last edited. `npm run typecheck` and `npm test` are both clean as of this
+file's last edit (191 tests).
 
 ## On-device checklist
 
@@ -125,6 +141,14 @@ through together once a device is available rather than repeating
   `tools/sound-gen/README.md`) — expect the user to want them replaced
   once heard, same as the app icon and stone restyle both took a few
   rounds.
+- **Dev tools** — cosmetic only, but worth a glance: does the FPS overlay
+  sit somewhere it doesn't block anything important on a real notch/insets
+  layout (`src/components/FpsOverlay.tsx`); does the board screen's small
+  `🛠` panel (`src/screens/BoardScreen.tsx`) overlap the exit button or the
+  HUD at odd aspect ratios; does `DevStoneGalleryScreen`'s grid lay out
+  sensibly at all four size options on a real screen width. None of this
+  ships to players (`DEV_TOOLS_ENABLED` is `false` in any release build),
+  so it's low priority relative to everything else on this list.
 
 ## Next up, in BUILD_PLAN.md order
 
@@ -152,10 +176,7 @@ through together once a device is available rather than repeating
    of the installed packages' own `.d.ts` files (empty README this SDK
    version) was enough, and the two apps' actual wiring wasn't checked.
    Worth a look if the on-device pass above turns up something odd.
-6. **Dev tools** — auto-unlock everything, jump to a specific board,
-   instant-complete, solution overlay, FPS counter, free look at the
-   faux-3D style. All gated behind one clear flag/menu per the plan so
-   they're easy to strip before release. Nothing built yet.
+6. ~~**Dev tools**~~ done — see "Done" item 11 above.
 7. **More source images for levels 8-20** — `LEVEL_COUNT` is 20
    (`src/constants/board.ts`), only 7 levels are prepared. The user
    provides source images; run `tools/prep-images` on them the same way
@@ -174,6 +195,13 @@ through together once a device is available rather than repeating
   "what did this board look like" from the walls' own store, it isn't
   there — go through `game/persistence.ts` by board id string instead,
   the way `src/game/levelReplay.ts` does.
+- **`Progress.onboardingSeen` (`src/storage/progress.ts`) is also dead** —
+  a pre-existing field from PR #5, set to `false` at init and never read or
+  written anywhere else. The real onboarding-seen flag this session built
+  (see "Done" item 9) is a separate, unrelated key
+  (`gleam:onboarding:v1`, `src/storage/onboarding.ts`) — not a fix for
+  this field, and not something this session touched. Worth deleting in a
+  pass that's actually about `Progress`'s shape, not in passing.
 - **Cross-promotion links were explicitly rejected** — BUILD_PLAN.md
   originally asked for a "more games" section linking the studio's other
   titles in Settings. The user said no, they don't want that in the app at

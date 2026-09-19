@@ -6,6 +6,8 @@ export type RootStackParamList = {
   Board: { levelId: number; boardId: number };
   LevelComplete: { levelId: number };
   Settings: undefined;
+  DevTools: undefined;
+  DevStoneGallery: undefined;
 };
 
 declare global {

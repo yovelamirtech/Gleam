@@ -10,6 +10,7 @@ import { BoardCanvas, CELL, type DropPreview } from '../components/BoardCanvas';
 import ColorPicker from '../components/ColorPicker';
 import HudTray, { trayMetrics } from '../components/HudTray';
 import OnboardingOverlay, { type OnboardingStep } from '../components/OnboardingOverlay';
+import { DEV_TOOLS_ENABLED } from '../constants/devTools';
 import { resolveDropHead } from '../game/drop';
 import { useBoardSession } from '../hooks/useBoardSession';
 import type { BoardData, Orientation } from '../game/types';
@@ -91,6 +92,11 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
           },
         ]
       : null;
+
+  // Dev tools (BUILD_PLAN.md): instant-complete and the solution overlay both
+  // need a live session, so they live here rather than on the DevTools menu.
+  const [devPanelOpen, setDevPanelOpen] = useState(false);
+  const [showSolution, setShowSolution] = useState(false);
 
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const canvasRef = useRef<View>(null);
@@ -377,6 +383,7 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
                   translateX={translateX}
                   translateY={translateY}
                   scale={scale}
+                  showSolution={DEV_TOOLS_ENABLED && showSolution}
                 />
               ) : null}
             </View>
@@ -400,6 +407,42 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
             </View>
           ) : null}
           {!ready ? <View style={styles.loading} testID="board-loading" /> : null}
+
+          {DEV_TOOLS_ENABLED ? (
+            <>
+              <Pressable
+                onPress={() => setDevPanelOpen((open) => !open)}
+                accessibilityRole="button"
+                accessibilityLabel="Dev tools"
+                testID="dev-panel-toggle"
+                style={styles.devButton}
+              >
+                <Text style={styles.devButtonLabel}>🛠</Text>
+              </Pressable>
+              {devPanelOpen ? (
+                <View style={styles.devPanel} testID="dev-panel">
+                  <Pressable
+                    onPress={() => session.completeInstantly()}
+                    accessibilityRole="button"
+                    testID="dev-instant-complete"
+                    style={styles.devPanelRow}
+                  >
+                    <Text style={styles.devPanelLabel}>Instant complete</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setShowSolution((value) => !value)}
+                    accessibilityRole="button"
+                    testID="dev-show-solution"
+                    style={styles.devPanelRow}
+                  >
+                    <Text style={styles.devPanelLabel}>
+                      {showSolution ? 'Hide solution' : 'Show solution'}
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </>
+          ) : null}
         </View>
 
         <View testID="color-picker-row" onLayout={(event) => setColorPickerLayout(event.nativeEvent.layout)}>
@@ -492,6 +535,42 @@ const styles = StyleSheet.create({
   completeText: {
     color: '#ffffff',
     fontWeight: '700',
+  },
+  devButton: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.panel,
+    borderWidth: 1,
+    borderColor: theme.panelBorder,
+  },
+  devButtonLabel: {
+    fontSize: 16,
+  },
+  devPanel: {
+    position: 'absolute',
+    bottom: 52,
+    right: 10,
+    backgroundColor: theme.panel,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.panelBorder,
+    paddingVertical: 4,
+    minWidth: 160,
+  },
+  devPanelRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  devPanelLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.text,
   },
 });
 

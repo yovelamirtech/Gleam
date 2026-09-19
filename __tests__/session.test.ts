@@ -282,6 +282,57 @@ describe('row completion', () => {
   });
 });
 
+describe('dev tool: instant completion', () => {
+  it('fills every empty cell with its required colour in one batch', () => {
+    const session = fresh();
+    take(session, 0, 3);
+    session.place(0, 0); // three real stones down first, so the batch has to skip them
+
+    session.completeInstantly();
+
+    expect(session.isComplete()).toBe(true);
+    for (let cell = 0; cell < board.cells.length; cell += 1) {
+      expect(session.cellAtIndex(cell).placed).toBe(board.cells[cell]);
+    }
+    expectSupplyMatchesBoard(session);
+  });
+
+  it('drops whatever was airborne or selected, since nothing is left to place', () => {
+    const session = fresh();
+    take(session, 1, 2);
+
+    session.completeInstantly();
+
+    expect(session.airborneStrip).toBeNull();
+    expect(session.traySelection).toBeNull();
+  });
+
+  it('does nothing, and does not notify, on an already-complete board', () => {
+    const session = fresh();
+    session.completeInstantly();
+    let notified = false;
+    session.subscribe(() => {
+      notified = true;
+    });
+
+    session.completeInstantly();
+
+    expect(notified).toBe(false);
+  });
+
+  it('keeps placement order monotonic on top of stones already placed', () => {
+    const session = fresh();
+    take(session, 0, 1);
+    session.place(0, 0, 1000);
+
+    session.completeInstantly(2000);
+
+    const orders = session.placements.map((p) => p.order);
+    expect(new Set(orders).size).toBe(orders.length);
+    expect(Math.min(...orders)).toBe(0);
+  });
+});
+
 describe('after the stones land', () => {
   it('empties the hand and keeps the tray on the same colour and count', () => {
     const session = fresh();

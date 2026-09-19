@@ -1,9 +1,10 @@
-import { BOARDS_X, BOARDS_PER_LEVEL, LEVELS_X } from '../src/constants/board';
+import { BOARDS_X, BOARDS_PER_LEVEL, LEVEL_COUNT, LEVELS_X } from '../src/constants/board';
 import {
   boardStatus,
   centreBoardId,
   initialProgress,
   markBoardCompleted,
+  unlockAll,
 } from '../src/storage/progress';
 
 describe('markBoardCompleted', () => {
@@ -56,5 +57,30 @@ describe('markBoardCompleted', () => {
       progress = markBoardCompleted(progress, 0, boardId);
     }
     expect(progress.levels[0].status).not.toBe('completed');
+  });
+});
+
+describe('unlockAll (dev tool)', () => {
+  it('unlocks every level and every board from a fresh start', () => {
+    const unlocked = unlockAll(initialProgress());
+
+    for (let levelId = 0; levelId < LEVEL_COUNT; levelId += 1) {
+      expect(unlocked.levels[levelId].status).toBe('unlocked');
+      for (let boardId = 0; boardId < BOARDS_PER_LEVEL; boardId += 1) {
+        expect(boardStatus(unlocked, levelId, boardId)).toBe('unlocked');
+      }
+    }
+  });
+
+  it('leaves completed levels and boards completed, not merely unlocked', () => {
+    let progress = initialProgress();
+    for (let boardId = 0; boardId < BOARDS_PER_LEVEL; boardId += 1) {
+      progress = markBoardCompleted(progress, 0, boardId);
+    }
+
+    const unlocked = unlockAll(progress);
+
+    expect(unlocked.levels[0].status).toBe('completed');
+    expect(boardStatus(unlocked, 0, 0)).toBe('completed');
   });
 });

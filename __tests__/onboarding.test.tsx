@@ -72,6 +72,9 @@ describe('onboarding overlay', () => {
     expect(screen.queryByTestId('onboarding-overlay')).toBeNull();
   });
 
+  // Two full board renders back to back, each already waiting out its own
+  // loading state - slower than jest's 5000ms default under a busy full
+  // suite run, so this one gets more room.
   it('remembers a dismissal so it never shows again', async () => {
     const first = await renderBoard();
     await waitFor(() => expect(screen.getByTestId('onboarding-overlay')).toBeTruthy(), { timeout: 5000 });
@@ -84,5 +87,5 @@ describe('onboarding overlay', () => {
     // onboarding storage check the same beat before asserting it stayed off.
     await renderBoard();
     expect(screen.queryByTestId('onboarding-overlay')).toBeNull();
-  });
+  }, 15000);
 });
