@@ -46,57 +46,68 @@ technical writeup of each:
    on a real device yet.
 8. **Opening screens** — `SplashScreen` (the studio wordmark, then an
    auto-transition) and `TapToStartScreen` (the game's own icon, tap to
-   enter the levels wall). See "Next up" below for what's unfinished here.
+   enter the levels wall).
+9. **Onboarding overlay** — `OnboardingOverlay`
+   (`src/components/OnboardingOverlay.tsx`), wired into `BoardScreen`. Two
+   steps, shown once ever (`gleam:onboarding:v1` in
+   `src/storage/onboarding.ts`, not per board): the colour row, then the
+   tray, each dimmed-around with a card above it and Skip/Next/Got it.
+   `BoardScreen` measures both rows itself (`onLayout` on the wrapper
+   `View`s around `ColorPicker`/`HudTray`, testIDs `color-picker-row` /
+   `hud-tray-row`) so the overlay never needs hardcoded coordinates.
+   `__tests__/onboarding.test.tsx` covers the sequence, skip, and the
+   AsyncStorage flag persisting across a remount; nothing about it has
+   been seen on an actual screen.
 
 All of the above is on branch `claude/affectionate-cannon-z4do8h`. PR #8
-(items 1-6) and PR #9 (item 7) are both merged into `main`; item 8 is
-this session's addition, not yet in its own PR when this note was last
+(items 1-6) and PR #9 (items 7-8) are merged into `main`; item 9 is this
+session's addition, not yet in its own PR when this note was last
 edited. `npm run typecheck` and `npm test` are both clean as of this
-file's last edit (170+ tests).
+file's last edit (174 tests).
+
+## On-device checklist
+
+Nothing in this project has been run on a real device or simulator this
+whole build (remote container, nothing attached) — every item below is
+still open, gathered here in one place per the user's request, to go
+through together once a device is available rather than repeating
+"not checked on a real device" scattered through this file:
+
+- **Splash duration and layout** — is 1.4s the right beat before
+  `SplashScreen` moves on; does `wordmark.png` read at the right size and
+  position across phone sizes (`src/screens/SplashScreen.tsx`).
+- **Tap-to-start layout** — does the icon/title/prompt sizing and spacing
+  look right (`src/screens/TapToStartScreen.tsx`).
+- **Onboarding overlay** — does the dim/spotlight band actually land on
+  the colour row and tray row on a real layout (the estimate in
+  `OnboardingOverlay`'s `CARD_HEIGHT_ESTIMATE` could be off for a longer
+  system font size); does the card sit legibly above both, especially in
+  landscape or on a short screen where `cardTop` clamps to `12`
+  (`src/components/OnboardingOverlay.tsx`).
+- **In-game stone restyle frame rate** — 8-wedge faceted stones instead of
+  the old rounded-rect-plus-gradient one, up to 1600 per board redraw
+  during a placement animation; drop to 6 wedges if it stutters
+  (`src/ui/drawStone.ts`).
+- **Level-complete celebration feel** — zoom-out, sparkle sweep,
+  vanish/reappear timing and frame rate; only the ordering logic is
+  covered by tests (`src/screens/LevelCompleteScreen.tsx`,
+  `src/game/levelReplay.ts`).
 
 ## Next up, in BUILD_PLAN.md order
 
-1. ~~**Opening screens**~~ mostly done, one loose end — the user provided
-   the studio logo as `assets/studio_logo/wordmark.svg` (plus two square
-   icon variants, `icon-primary.svg`/`icon-appstore.svg`, not used
-   in-app — they read as app-store-listing assets, not a splash asset;
-   revisit if the user says otherwise). It's rasterized once, at build
-   time, to `assets/studio_logo/wordmark.png` (2x the SVG's 720x200
-   viewBox, transparent background) the same way `tools/app-icon`
-   rasterizes its own SVG — there's no SVG-rendering library in the app
-   itself (no `react-native-svg`), so this keeps it that way rather than
-   adding one for a single static logo. If the user replaces
-   `wordmark.svg` later, re-render it the same way (see the git history
-   of this file for the one-off script; it wasn't kept as a
-   `tools/`-style reusable script since this asset doesn't change often).
-   `SplashScreen` shows it for 1.4s then auto-`replace`s to
-   `TapToStartScreen`, which shows the existing `assets/icon.png`
-   (already on the same `colors.background` as the app, so no extra
-   asset needed) and `replace`s to `Levels` on tap. **Not checked on a
-   real device** — is 1.4s the right splash duration, does the wordmark
-   size/position read well on an actual phone, etc. Nothing else in
-   מסכי פתיחה וניווט is outstanding (Levels/Board/Settings all exist).
-2. ~~**Restyle the in-game stones to match the icon**~~ done —
-   `src/ui/drawStone.ts` now draws the same shape language as
-   `tools/app-icon/make-icons.mjs`'s `rhinestone()`: a ring of trapezoid
-   facets around a small flat centre "table", each a flat shade (no
-   gradient) picked by its angle against the fixed top-left light source,
-   plus a specular arc instead of the old oval highlight. Uses 8 wedges
-   instead of the icon's 12 — at `CELL = 24` a 12-wedge stone's facets
-   would be a couple of pixels wide, so 8 keeps it reading as faceted
-   while cutting draw calls per stone (`Skia.Path` + fill + stroke per
-   facet, drawn `WEDGES` times instead of the old one rect + one line +
-   one oval). `LevelCompleteCanvas.tsx` is untouched on purpose — it still
-   draws flat colour without the stone treatment, since facets don't read
-   at that zoom (320x240 cells on one screen). **Not profiled on a real
-   device** — `npm test`/`npm run typecheck` are clean, but nobody has
-   checked frame rate with ~8x the draw calls per stone during a
-   placement animation with up to 1600 stones on screen. If it stutters,
-   dropping to 6 wedges is the next lever (see the git history of this
-   file's earlier note for the reasoning), before considering baking
-   stone shapes into a shared `SkPicture`/image cache.
-3. **Onboarding overlay** — first-visit tap targets on the board screen,
-   shown once (AsyncStorage flag), skippable. Nothing built yet.
+1. ~~**Opening screens**~~ done — see "Done" item 8 above. Nothing else in
+   מסכי פתיחה וניווט is outstanding (Levels/Board/Settings all exist). The
+   user provided the studio logo as `assets/studio_logo/wordmark.svg`
+   (plus two square icon variants, `icon-primary.svg`/`icon-appstore.svg`,
+   not used in-app — they read as app-store-listing assets, not a splash
+   asset; revisit if the user says otherwise). If the user replaces
+   `wordmark.svg` later, re-render it to `wordmark.png` the same way
+   `tools/app-icon` rasterizes its own SVG (see this file's git history
+   for the one-off script — not kept as a `tools/`-style reusable one
+   since this asset doesn't change often).
+2. ~~**Restyle the in-game stones to match the icon**~~ done — see "Done"
+   item 7 above.
+3. ~~**Onboarding overlay**~~ done — see "Done" item 9 above.
 4. **Ads & monetization** (AdMob banner + interstitial, one-time IAP to
    remove both) — nothing built yet. Needs its own research pass on
    current Expo-compatible libraries (`AGENTS.md`'s warning about Expo v57
@@ -142,8 +153,5 @@ file's last edit (170+ tests).
   against real screenshots/feedback rather than getting it right blind
   from a text description.
 - **Nothing here has been run on a real device or simulator** this whole
-  session (remote container, no attached device). Everything is verified
-  by `npm run typecheck` + `npm test` + reading rendered PNGs for the icon.
-  Anything animation- or performance-sensitive (the level-complete replay,
-  and especially the stone restyle above) should get an actual on-device
-  check before being called done.
+  build (remote container, no attached device) — see "On-device checklist"
+  above for the running list of what to verify once one is available.

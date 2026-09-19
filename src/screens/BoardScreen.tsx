@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
+import { LayoutChangeEvent, LayoutRectangle, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -8,9 +8,11 @@ import AirborneStripView, { AIRBORNE_STONE } from '../components/AirborneStrip';
 import { BoardCanvas, CELL, type DropPreview } from '../components/BoardCanvas';
 import ColorPicker from '../components/ColorPicker';
 import HudTray, { trayMetrics } from '../components/HudTray';
+import OnboardingOverlay, { type OnboardingStep } from '../components/OnboardingOverlay';
 import { resolveDropHead } from '../game/drop';
 import { useBoardSession } from '../hooks/useBoardSession';
 import type { BoardData, Orientation } from '../game/types';
+import { hasSeenOnboarding, markOnboardingSeen } from '../storage/onboarding';
 import { theme } from '../ui/theme';
 import { countAtX, shouldLift } from '../ui/trayGesture';
 import {
@@ -56,6 +58,34 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
       onComplete?.();
     }
   }, [session, revision, onComplete]);
+
+  // First-run coach marks. `null` means "still checking storage" so the
+  // overlay never flashes on for a returning player while that resolves.
+  const [onboardingSeen, setOnboardingSeen] = useState<boolean | null>(null);
+  const [colorPickerLayout, setColorPickerLayout] = useState<LayoutRectangle | null>(null);
+  const [trayLayout, setTrayLayout] = useState<LayoutRectangle | null>(null);
+  useEffect(() => {
+    hasSeenOnboarding().then(setOnboardingSeen);
+  }, []);
+  const dismissOnboarding = useCallback(() => {
+    setOnboardingSeen(true);
+    markOnboardingSeen();
+  }, []);
+  const onboardingSteps: OnboardingStep[] | null =
+    onboardingSeen === false && colorPickerLayout && trayLayout
+      ? [
+          {
+            target: colorPickerLayout,
+            title: 'Pick a colour',
+            body: 'Tap a swatch to pick up its stones.',
+          },
+          {
+            target: trayLayout,
+            title: 'Place the stones',
+            body: 'Slide sideways to choose how many, then pull up and drag them onto the board.',
+          },
+        ]
+      : null;
 
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const canvasRef = useRef<View>(null);
@@ -364,20 +394,27 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
           {!ready ? <View style={styles.loading} testID="board-loading" /> : null}
         </View>
 
-        <ColorPicker
-          session={session}
-          selected={selection?.color ?? null}
-          onSelect={handleSelectColor}
-        />
+        <View testID="color-picker-row" onLayout={(event) => setColorPickerLayout(event.nativeEvent.layout)}>
+          <ColorPicker
+            session={session}
+            selected={selection?.color ?? null}
+            onSelect={handleSelectColor}
+          />
+        </View>
 
-        <HudTray
-          selection={selection}
-          entry={trayEntry}
-          stones={session.trayStones}
-          count={selection?.count ?? 0}
-          gesture={trayGesture}
-        />
+        <View testID="hud-tray-row" onLayout={(event) => setTrayLayout(event.nativeEvent.layout)}>
+          <HudTray
+            selection={selection}
+            entry={trayEntry}
+            stones={session.trayStones}
+            count={selection?.count ?? 0}
+            gesture={trayGesture}
+          />
+        </View>
 
+        {onboardingSteps ? (
+          <OnboardingOverlay steps={onboardingSteps} onDone={dismissOnboarding} />
+        ) : null}
       </SafeAreaView>
 
       <AirborneStripView
