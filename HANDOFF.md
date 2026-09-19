@@ -351,7 +351,14 @@ through together once a device is available rather than repeating
   until then); does "Restore purchases" in `SettingsScreen` actually find a
   prior purchase after a reinstall.
 
-## Next up, in BUILD_PLAN.md order
+## Next up
+
+**Start with item 8 below** (the unified wall) — that is what the user
+asked for next, explicitly, in the same message this whole list comes
+from. The rest of this list is numbered by BUILD_PLAN.md order, not
+priority; items 1-6 are already done (kept here as pointers into "Done"
+above) and item 7 depends on the user supplying images, so it isn't
+blocking anything.
 
 1. ~~**Opening screens**~~ done — see "Done" item 8 above. Nothing else in
    מסכי פתיחה וניווט is outstanding (Levels/Board/Settings all exist). The
@@ -380,29 +387,106 @@ through together once a device is available rather than repeating
    (`src/constants/board.ts`), only 7 levels are prepared. The user
    provides source images; run `tools/prep-images` on them the same way
    PR #6 did.
-8. **The big one, explicitly deferred to its own round (user's own
-   choice)**: replace board-by-board and level-by-level navigation with
-   one continuous, freely zoomable/pannable canvas at each layer -
-   inside a level, the player should always be "inside" the whole
-   picture (all 48 boards visibly stitched together, only separated by a
-   thin line) rather than entering one board screen at a time; the
-   levels wall should work the same way (one giant wall of every level's
-   artwork, only the centre one unlocked, free pan/zoom to browse
-   without paging). This is not a small change - it touches navigation
-   (no more separate `Boards`/`Board` routes, or they change meaning),
-   the viewport/gesture code (`src/ui/viewport.ts` currently zooms/pans
-   one 40x40 board, not a 320x240 whole-level canvas), and rendering
-   performance is the real risk: the user *also* asked "how do we make
-   performance better, because a full board is already getting hard to
-   run" in the same message - and this change means rendering far more
-   than one board at once, the opposite direction from what that request
-   wants unless it's done carefully (tiled/virtualized rendering, only
-   drawing what's on screen, something closer to what
-   `LevelCompleteCanvas` already does at flattened/low fidelity for the
-   celebration screen). Read that whole feedback message again before
-   starting - it has the exact wording of what's wanted. No design or
-   architecture decisions have been made yet; this needs its own
-   planning pass, not just diving into code.
+8. **START HERE — the unified wall.** The user's own next instruction,
+   verbatim (Hebrew, from the session that wrote this note), was: "תתעד
+   הכל ואני רוצה שהסוכן הבא יתחיל בקיר המאוחד" — "document everything,
+   and I want the next agent to start on the unified wall." This whole
+   item is that documentation. No code for it exists yet; this is a
+   planning-plus-implementation task, not a quick fix. **Do not skip
+   straight to coding** — this changes navigation, rendering, and touches
+   the performance complaint below too; get the approach confirmed
+   (`AskUserQuestion` or similar) before writing code, the way this
+   session did for the ads/IAP infrastructure change.
+
+   **What the user actually asked for**, their own words translated
+   closely (originally about the board screen, but they confirmed - see
+   below - the same idea applies to the levels wall too):
+
+   > "דמיינתי יותר את כל הבורדים מחוברים יחד ורק מופרדים עם קו. אפשר
+   > לעשות זום אין ואאוט חופשי על הציור הכולל, כדי לראות את הבורד שלי,
+   > ותמיד אפשר לשחק בו. כשאתה במשחק אתה משחק בכל הציור ביחד."
+   > — "I imagined all the boards connected together, only separated by
+   > a line. You can freely zoom in/out on the whole picture to see your
+   > board, and you can always play on it. When you're in the game
+   > you're playing on the whole picture together."
+
+   > "זה צריך להיות קיר אחד ענק עם כל התמונות. רק אחת פתוחה במרכז, והשאר
+   > מסביב חסומות. אפשר לעשות זום אין ואאוט חופשי להסתכל מקום מאוד על
+   > היצירות שלך ולזוז חופשי בין היצירות."
+   > — (about the *levels* wall) "This should be one giant wall with
+   > every picture. Only one open in the centre, the rest locked around
+   > it. Free zoom in/out to look closely at your works and move freely
+   > between them."
+
+   So **two separate screens, same idea applied twice**:
+   - Inside a level: today `BoardsScreen` (a tappable 8x6 grid of tiles)
+     is a separate screen from `BoardRoute`/`BoardScreen` (one 40x40
+     board at a time, entered by tapping a tile). The ask is to collapse
+     these into one screen - the whole 320x240-cell level as a single
+     pannable/zoomable canvas, thin lines between boards instead of a
+     hard screen transition, and gameplay (tray, HUD, placing stones)
+     working against whatever board the viewport is currently centred
+     on/over. A board earns its "unlocked" status exactly as it does
+     today (finishing a neighbour), it just doesn't get its own screen
+     any more - locked boards would need some kind of dimmed/greyed
+     treatment *within* the single canvas instead of not being
+     reachable.
+   - The levels wall: today `LevelsScreen` is a `ScrollView` grid of
+     tiles, one per level, each a small preview image. The ask is a
+     single giant zoomable/pannable canvas of *every* level's full
+     preview artwork (not just a small tile), only the centre level
+     unlocked at the start, same free zoom/pan to browse.
+
+   **In the same message, the user also asked**: "צריך להבין איך משפרים
+   ביצועים כי לוח מלא מתחיל להיות כבר קשה להריץ, ואני רוצה להריץ את כל
+   התמונה" — "need to figure out how to improve performance, because a
+   full board is already getting hard to run, and I want to run the
+   whole picture." **These two asks pull in opposite directions** unless
+   handled carefully: today's board screen already struggles rendering
+   one 40x40 board (1600 cells, each a faceted `drawStone` with up to 8
+   Skia draw calls); the wall this item asks for is a 320x240-cell
+   canvas (48x the cells) for one level, and the levels wall is 20 full
+   preview images at once. Rendering everything all the time is very
+   likely a non-starter - some form of only-draw-what's-visible
+   (viewport-culled / tiled rendering) is probably required, not
+   optional polish. No profiling has been done on a real device yet (see
+   "On-device checklist"), so treat "why is the current board already
+   slow" as an open question to investigate first, not an assumption -
+   it could be the per-stone Skia draw-call count, the picture-rebuild
+   strategy, the gesture/viewport math, or something else entirely, and
+   the fix for the unified wall may or may not be the same fix as for
+   today's single-board slowness.
+
+   **Relevant existing code to read before designing anything:**
+   - `src/ui/viewport.ts` — the current pan/zoom math, clamped to one
+     board's bounds (`fitViewport`, `zoomAround`, `clampViewport`). Will
+     need to work over a whole level's (or whole wall's) bounds instead.
+   - `src/components/BoardCanvas.tsx` — draws one board as a handful of
+     baked Skia `Picture`s (grid, stones, preview), recomposited via a
+     `<Group transform={...}>` driven by the viewport's shared values.
+     The closest existing precedent for "a lot of cells at once" is:
+   - `src/screens/LevelCompleteScreen.tsx` +
+     `src/components/LevelCompleteCanvas.tsx` — already renders a whole
+     level (320x240 cells) at once, but flattened to solid colour (no
+     per-stone faceting) specifically because that's too much to draw
+     at full fidelity every frame, and even then throttles its own
+     redraw rate (`FRAME_BUDGET_MS`). Worth understanding exactly why
+     that tradeoff was made before assuming full-fidelity stones are
+     viable at wall scale.
+   - `src/game/session.ts`/`src/hooks/useBoardSession.ts` — currently
+     one `BoardSession` per board, loaded/persisted independently
+     (`src/game/persistence.ts`, keyed by board id string). A unified
+     canvas spanning many boards raises the question of whether that
+     stays one session per board (probably yes, for minimal disruption
+     to the exact-stone-economy logic) or needs to change.
+   - `src/screens/BoardsScreen.tsx`, `src/screens/LevelsScreen.tsx`,
+     `src/screens/BoardRoute.tsx`, `App.tsx`'s `Stack.Navigator` - the
+     navigation structure this item would restructure or remove.
+   - `src/storage/progress.ts` - board/level lock state
+     (`boardStatus`/`centreBoardId`/`markBoardCompleted`), which the
+     within-canvas "locked" treatment would read the same way `BoardsScreen`
+     does today, just rendered differently (dimmed on-canvas instead of
+     a separate locked tile).
 
 ## Things worth knowing that aren't obvious from the code alone
 
