@@ -1,6 +1,6 @@
 import { generatePalette } from '../../src/game/palette';
 import { BoardSession } from '../../src/game/session';
-import type { BoardData } from '../../src/game/types';
+import type { BoardData, Orientation } from '../../src/game/types';
 
 /**
  * Build a tiny board from an ASCII map, one digit per cell.
@@ -44,14 +44,28 @@ export function expectSupplyMatchesBoard(session: BoardSession): void {
   }
 }
 
+/**
+ * The whole tray move in one call: point the tray at a colour, size the strip,
+ * and pull the stones into the air ready to drop.
+ */
+export function take(
+  session: BoardSession,
+  color: number,
+  count = 1,
+  orientation: Orientation = 'horizontal'
+): void {
+  session.selectColor(color);
+  session.setSelectionCount(count);
+  session.liftStrip(orientation);
+}
+
 /** Fill a board one stone at a time, taking each cell in reading order. */
 export function fillBoard(session: BoardSession): void {
   for (let row = 0; row < session.board.height; row += 1) {
     for (let col = 0; col < session.board.width; col += 1) {
       const cell = session.cellAt(row, col);
       if (cell.placed !== null) continue;
-      session.selectColor(cell.required);
-      session.setStripCount(1);
+      take(session, cell.required, 1);
       const result = session.place(row, col);
       if (!result.ok) throw new Error(`stuck at ${row},${col}: ${result.reason}`);
     }

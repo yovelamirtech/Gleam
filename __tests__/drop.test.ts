@@ -1,12 +1,12 @@
 import { resolveDropHead, type DropContext } from '../src/game/drop';
-import type { HeldStrip } from '../src/game/types';
+import type { AirborneStrip } from '../src/game/types';
 
 const CELL = 24;
 
 function context(overrides: Partial<DropContext> = {}): DropContext {
   return {
     board: { width: 40, height: 40 },
-    strip: { color: 0, count: 3, orientation: 'horizontal' } as HeldStrip,
+    strip: { color: 0, count: 3, orientation: 'horizontal' } as AirborneStrip,
     canvasOrigin: { x: 20, y: 100 },
     canvasSize: { width: 360, height: 600 },
     viewport: { translateX: 0, translateY: 0, scale: 1 },

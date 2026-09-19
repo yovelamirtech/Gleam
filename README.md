@@ -16,7 +16,7 @@ src/
   game/          pure game logic, no React and no native modules
     types.ts           board, palette, placement and strip types
     geometry.ts        board size, strip shapes, edge clamping
-    session.ts         BoardSession: supply, tray, placement, placement order
+    session.ts         BoardSession: supply, tray, airborne strip, placement order
     drop.ts            where a drag on screen would drop a strip
     palette.ts         level palette (stand-in for the prep script's output)
     placeholderBoard.ts generated board data until the prep script exists
@@ -25,8 +25,9 @@ src/
   ui/            drawing and layout helpers
     drawStone.ts       faux-3D stone: gradient, facet, highlight, shadow
     viewport.ts        pan/zoom maths, canvas <-> cell conversion
+    trayGesture.ts     the tray swipe: stone under the finger, pull-to-lift
     colors.ts, theme.ts, font.ts
-  components/    BoardCanvas (Skia), HudTray, ColorPicker
+  components/    BoardCanvas (Skia), HudTray, AirborneStrip, ColorPicker
   screens/       BoardScreen
   hooks/         useBoardSession
 ```
@@ -34,13 +35,21 @@ src/
 ### How the board plays
 
 - Each cell shows a **number only**. The colour it needs is never shown.
-- Picking a colour fills the five-slot tray from that board's supply. Tapping
-  tray slot *n* takes *n* stones instead of five; tapping the tray rotates the
-  strip between horizontal and vertical.
-- Dragging the tray carries the strip over the board and shows a preview of
-  where it will land, green when the drop is legal and red when it is not.
-- One finger on the board pans it, two fingers pinch to zoom. A drag that
-  starts on the tray always places stones, so placing never fights with moving.
+- The board takes the whole screen above a thin HUD; the exit button and the
+  progress count float over it rather than taking a bar of their own.
+- Picking a colour points the tray at it and takes **one** stone. The tray keeps
+  showing the pile — five stones — rather than emptying as you take from it.
+- **Swipe sideways across the tray** to take more: the panel behind the stones
+  fills up to the one under your finger. **Pull upward** to lift that many into
+  the air.
+- The lifted stones follow your finger and show a preview of where they will
+  land, green when the drop is legal and red when it is not.
+- A drop that does not fit — off the board, over the HUD, or onto cells wanting
+  another colour — **leaves the stones hanging in the air** where you released
+  them. Nothing is consumed and nothing snaps back. **Tapping them rotates**
+  between horizontal and vertical, and they stay in the air.
+- One finger on the board pans it, two fingers pinch to zoom, so placing never
+  fights with moving.
 - **The supply of each colour equals exactly the cells needing it.** A strip is
   placed all-or-nothing: if any cell it covers is filled or wants another
   colour, the whole strip stays in the tray and nothing is spent. That is what
@@ -69,8 +78,9 @@ npm run typecheck  # tsc --noEmit
 
 `npm test` covers the game model end to end: strip geometry and edge clamping,
 the stone economy (including a full 40x40 board played to completion without
-getting stuck), placement rules and rejection, placement order, save/load
-round-trips and corrupt-save handling, replay ordering, pan/zoom maths, drag-to-
-cell resolution, and the HUD wiring on the board screen. The Skia drawing layer
-itself is not unit-tested — it needs a native surface — and is stubbed out in
-the screen test.
+getting stuck), placement rules and rejection, the tray selection and the
+airborne strip, the tray swipe maths, placement order, save/load round-trips and
+corrupt-save handling, replay ordering, pan/zoom maths, drag-to-cell resolution,
+and the HUD wiring on the board screen. The Skia drawing layer itself is not
+unit-tested — it needs a native surface — and is stubbed out in the screen
+test.

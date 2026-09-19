@@ -2,17 +2,17 @@ import { replayForward, replayReverse, replaySlice } from '../src/game/replay';
 import { BoardSession } from '../src/game/session';
 import type { Placement } from '../src/game/types';
 
-import { makeBoard } from './support/helpers';
+import { makeBoard, take } from './support/helpers';
 
 function solved(): BoardSession {
   const session = new BoardSession(makeBoard(['0011', '0011']));
-  session.selectColor(0, 'vertical');
-  session.setStripCount(2);
+  take(session, 0, 2, 'vertical');
   session.place(0, 1, 100); // cells 1, 5
+  take(session, 0, 2, 'vertical');
   session.place(0, 0, 200); // cells 0, 4
-  session.selectColor(1);
-  session.setStripCount(2);
+  take(session, 1, 2);
   session.place(1, 2, 300); // cells 6, 7
+  take(session, 1, 2);
   session.place(0, 2, 400); // cells 2, 3
   return session;
 }

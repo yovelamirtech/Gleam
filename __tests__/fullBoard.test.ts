@@ -36,13 +36,13 @@ function playBoard(seed: number): BoardSession {
     expect(session.selectColor(color)).toBe(true);
 
     const orientation: Orientation = random() < 0.5 ? 'horizontal' : 'vertical';
-    if (session.heldStrip!.orientation !== orientation) session.rotateStrip();
 
     // Take the longest strip that has somewhere to go, down to a single stone —
     // a single stone always fits, because supply is exactly the empty cells.
     let placed = false;
     for (let count = Math.min(TRAY_SLOTS, session.remainingFor(color)); count >= 1; count -= 1) {
-      session.setStripCount(count);
+      session.setSelectionCount(count);
+      session.liftStrip(orientation);
       const spot = firstLegalSpot(session);
       if (!spot) continue;
       const result = session.place(spot.row, spot.col);
@@ -50,6 +50,7 @@ function playBoard(seed: number): BoardSession {
       placed = true;
       break;
     }
+    if (!placed) session.returnStrip();
     expect(placed).toBe(true);
     expectSupplyMatchesBoard(session);
   }
@@ -83,7 +84,8 @@ describe('playing a full 40x40 board', () => {
       expect(session.remainingFor(entry.index)).toBe(0);
       expect(session.placedFor(entry.index)).toBe(session.requiredFor(entry.index));
     }
-    expect(session.heldStrip).toBeNull();
+    expect(session.airborneStrip).toBeNull();
+    expect(session.traySelection).toBeNull();
   });
 
   it('records a gap-free placement order covering every stone once', () => {
@@ -113,19 +115,24 @@ describe('misses never leak supply', () => {
     const session = new BoardSession(board);
     const random = mulberry32(5);
     session.selectColor(board.cells[0]);
+    session.liftStrip();
 
     let rejected = 0;
     for (let attempt = 0; attempt < 500; attempt += 1) {
       const row = Math.floor(random() * board.height);
       const col = Math.floor(random() * board.width);
-      const held = session.heldStrip;
+      const strip = session.airborneStrip;
       const before = session.stonesPlaced;
       const result = session.place(row, col);
       if (result.ok) {
-        expect(session.stonesPlaced).toBe(before + (held?.count ?? 0));
+        expect(session.stonesPlaced).toBe(before + (strip?.count ?? 0));
+        // Landing empties the hand, so pick the stones back up to keep going.
+        session.liftStrip();
       } else {
         rejected += 1;
         expect(session.stonesPlaced).toBe(before);
+        // A miss leaves them hanging in the air, ready for another try.
+        expect(session.airborneStrip).toEqual(strip);
       }
       expectSupplyMatchesBoard(session);
     }

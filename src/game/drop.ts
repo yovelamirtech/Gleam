@@ -1,11 +1,11 @@
 import { clampStripHead } from './geometry';
-import type { BoardData, HeldStrip } from './types';
+import type { AirborneStrip, BoardData } from './types';
 import type { Viewport } from '../ui/viewport';
 import { canvasToCell } from '../ui/viewport';
 
 export interface DropContext {
   board: Pick<BoardData, 'width' | 'height'>;
-  strip: HeldStrip | null;
+  strip: AirborneStrip | null;
   /** Where the board canvas sits on screen. */
   canvasOrigin: { x: number; y: number };
   canvasSize: { width: number; height: number };

@@ -1,7 +1,7 @@
 import { TRAY_SLOTS } from '../src/game/geometry';
 import { BoardSession } from '../src/game/session';
 
-import { expectSupplyMatchesBoard, fillBoard, makeBoard } from './support/helpers';
+import { expectSupplyMatchesBoard, fillBoard, makeBoard, take } from './support/helpers';
 
 // 0 0 0 0 0 0
 // 0 0 0 0 0 0
@@ -22,9 +22,9 @@ describe('construction', () => {
   });
 
   it('rejects a board whose cell count does not match its size', () => {
-    expect(
-      () => new BoardSession({ ...board, cells: board.cells.slice(0, 5) })
-    ).toThrow(/expected 18 cells/);
+    expect(() => new BoardSession({ ...board, cells: board.cells.slice(0, 5) })).toThrow(
+      /expected 18 cells/
+    );
   });
 
   it('rejects a cell colour that is not in the palette', () => {
@@ -40,88 +40,161 @@ describe('construction', () => {
   });
 });
 
-describe('picking a colour up', () => {
-  it('fills all five slots when supply allows', () => {
+describe('pointing the tray at a colour', () => {
+  it('takes one stone by default', () => {
     const session = fresh();
     expect(session.selectColor(0)).toBe(true);
-    expect(session.heldStrip).toEqual({ color: 0, count: TRAY_SLOTS, orientation: 'horizontal' });
+    expect(session.traySelection).toEqual({ color: 0, count: 1 });
   });
 
-  it('fills only as many slots as the board still owes', () => {
-    const session = fresh();
-    session.selectColor(1);
-    expect(session.heldStrip?.count).toBe(3);
-  });
-
-  it('refuses a colour with nothing left and keeps the held strip', () => {
-    const session = fresh();
-    session.selectColor(1);
-    session.place(2, 0); // spends all three stones of colour 1
-    session.selectColor(2);
-    expect(session.selectColor(1)).toBe(false);
-    expect(session.heldStrip?.color).toBe(2);
-  });
-
-  it('returns the previous strip to supply when another colour is picked', () => {
+  it('leaves the tray showing the pile, not the strip', () => {
     const session = fresh();
     session.selectColor(0);
-    expect(session.availableFor(0)).toBe(12 - TRAY_SLOTS);
+    expect(session.trayStones).toBe(TRAY_SLOTS);
+    session.setSelectionCount(3);
+    // Sizing the strip does not empty the tray; the stones are still in it.
+    expect(session.trayStones).toBe(TRAY_SLOTS);
+  });
+
+  it('shows only what is left once the pile drops below a full tray', () => {
+    const session = fresh();
     session.selectColor(1);
-    expect(session.availableFor(0)).toBe(12);
+    expect(session.trayStones).toBe(3);
+  });
+
+  it('refuses a colour the board no longer owes', () => {
+    const session = fresh();
+    take(session, 1, 3);
+    session.place(2, 0);
+    expect(session.selectColor(1)).toBe(false);
+    expect(session.traySelection).toBeNull();
   });
 
   it('ignores a colour outside the palette', () => {
     const session = fresh();
     expect(session.selectColor(7)).toBe(false);
-    expect(session.heldStrip).toBeNull();
+    expect(session.traySelection).toBeNull();
+  });
+
+  it('returns airborne stones to the pile when another colour is picked', () => {
+    const session = fresh();
+    take(session, 0, 4);
+    expect(session.availableFor(0)).toBe(8);
+    session.selectColor(1);
+    expect(session.airborneStrip).toBeNull();
+    expect(session.availableFor(0)).toBe(12);
+  });
+
+  it('resets to one stone on a new colour', () => {
+    const session = fresh();
+    session.selectColor(0);
+    session.setSelectionCount(5);
+    session.selectColor(2);
+    expect(session.traySelection).toEqual({ color: 2, count: 1 });
   });
 });
 
-describe('shaping the strip', () => {
-  it('trims the strip to the tapped slot', () => {
+describe('sizing the strip with a swipe', () => {
+  it('raises the count to the stone under the finger', () => {
     const session = fresh();
     session.selectColor(0);
-    expect(session.setStripCount(2)).toBe(true);
-    expect(session.heldStrip?.count).toBe(2);
+    expect(session.setSelectionCount(4)).toBe(true);
+    expect(session.traySelection?.count).toBe(4);
+  });
+
+  it('clamps to the tray size and to what is in the pile', () => {
+    const session = fresh();
+    session.selectColor(0);
+    session.setSelectionCount(99);
+    expect(session.traySelection?.count).toBe(TRAY_SLOTS);
+    session.selectColor(1);
+    session.setSelectionCount(5);
+    expect(session.traySelection?.count).toBe(3);
+    session.setSelectionCount(0);
+    expect(session.traySelection?.count).toBe(1);
+  });
+
+  it('does nothing with no colour picked', () => {
+    const session = fresh();
+    expect(session.setSelectionCount(3)).toBe(false);
+  });
+});
+
+describe('lifting stones into the air', () => {
+  it('pulls the selected number out of the tray', () => {
+    const session = fresh();
+    session.selectColor(0);
+    session.setSelectionCount(3);
+    expect(session.liftStrip()).toBe(true);
+    expect(session.airborneStrip).toEqual({ color: 0, count: 3, orientation: 'horizontal' });
+  });
+
+  it('reserves the airborne stones against the pile', () => {
+    const session = fresh();
+    take(session, 0, 3);
+    expect(session.availableFor(0)).toBe(9);
+    expect(session.remainingFor(0)).toBe(12);
+    expect(session.trayStones).toBe(TRAY_SLOTS);
+  });
+
+  it('lifts vertically when that is the carried orientation', () => {
+    const session = fresh();
+    take(session, 0, 2, 'vertical');
+    expect(session.airborneStrip?.orientation).toBe('vertical');
+  });
+
+  it('replaces a strip already in the air rather than stacking one', () => {
+    const session = fresh();
+    take(session, 0, 3);
+    take(session, 0, 2);
+    expect(session.airborneStrip?.count).toBe(2);
     expect(session.availableFor(0)).toBe(10);
   });
 
-  it('clamps a count to the tray size and to what is left', () => {
+  it('does nothing with no colour picked', () => {
     const session = fresh();
-    session.selectColor(0);
-    session.setStripCount(99);
-    expect(session.heldStrip?.count).toBe(TRAY_SLOTS);
-    session.selectColor(1);
-    session.setStripCount(5);
-    expect(session.heldStrip?.count).toBe(3);
-    session.setStripCount(0);
-    expect(session.heldStrip?.count).toBe(1);
+    expect(session.liftStrip()).toBe(false);
+  });
+});
+
+describe('the stones in the air', () => {
+  it('flips orientation on a tap and stays airborne', () => {
+    const session = fresh();
+    take(session, 0, 3);
+    expect(session.rotateStrip()).toBe(true);
+    expect(session.airborneStrip).toEqual({ color: 0, count: 3, orientation: 'vertical' });
+    session.rotateStrip();
+    expect(session.airborneStrip?.orientation).toBe('horizontal');
   });
 
-  it('rotates between horizontal and vertical', () => {
+  it('stays in the air after a drop that does not fit', () => {
     const session = fresh();
-    session.selectColor(0);
-    session.rotateStrip();
-    expect(session.heldStrip?.orientation).toBe('vertical');
-    session.rotateStrip();
-    expect(session.heldStrip?.orientation).toBe('horizontal');
+    take(session, 0, 3);
+    expect(session.place(2, 0)).toEqual({ ok: false, reason: 'wrong-color' });
+    expect(session.airborneStrip).toEqual({ color: 0, count: 3, orientation: 'horizontal' });
+    expect(session.stonesPlaced).toBe(0);
   });
 
-  it('does nothing with an empty tray', () => {
+  it('can be put back in the pile deliberately', () => {
+    const session = fresh();
+    take(session, 0, 3);
+    expect(session.returnStrip()).toBe(true);
+    expect(session.airborneStrip).toBeNull();
+    expect(session.availableFor(0)).toBe(12);
+  });
+
+  it('does nothing when there is nothing in the air', () => {
     const session = fresh();
     expect(session.rotateStrip()).toBe(false);
-    expect(session.setStripCount(3)).toBe(false);
-    expect(session.cancelStrip()).toBe(false);
+    expect(session.returnStrip()).toBe(false);
   });
 });
 
 describe('placing a strip', () => {
   it('lays a horizontal strip left to right from the head', () => {
     const session = fresh();
-    session.selectColor(0);
-    session.setStripCount(3);
-    const result = session.place(0, 0, 1000);
-    expect(result.ok).toBe(true);
+    take(session, 0, 3);
+    expect(session.place(0, 0, 1000).ok).toBe(true);
     expect(session.cellAt(0, 0).placed).toBe(0);
     expect(session.cellAt(0, 2).placed).toBe(0);
     expect(session.cellAt(0, 3).placed).toBeNull();
@@ -129,8 +202,7 @@ describe('placing a strip', () => {
 
   it('lays a vertical strip downward from the head', () => {
     const session = fresh();
-    session.selectColor(0, 'vertical');
-    session.setStripCount(2);
+    take(session, 0, 2, 'vertical');
     session.place(0, 4);
     expect(session.cellAt(0, 4).placed).toBe(0);
     expect(session.cellAt(1, 4).placed).toBe(0);
@@ -138,41 +210,30 @@ describe('placing a strip', () => {
 
   it('refuses a strip that runs off the board, spending nothing', () => {
     const session = fresh();
-    session.selectColor(0);
-    session.setStripCount(5);
+    take(session, 0, 5);
     expect(session.place(0, 3)).toEqual({ ok: false, reason: 'out-of-bounds' });
     expect(session.stonesPlaced).toBe(0);
     expect(session.remainingFor(0)).toBe(12);
   });
 
-  it('refuses the whole strip when any cell wants another colour', () => {
-    const session = fresh();
-    session.selectColor(0);
-    session.setStripCount(3);
-    // Row 2 is colours 1 and 2, not 0.
-    expect(session.place(2, 0)).toEqual({ ok: false, reason: 'wrong-color' });
-    expect(session.stonesPlaced).toBe(0);
-  });
-
   it('refuses the whole strip when any cell is already covered', () => {
     const session = fresh();
-    session.selectColor(0);
-    session.setStripCount(1);
+    take(session, 0, 1);
     session.place(0, 2);
-    session.setStripCount(3);
+    take(session, 0, 3);
     expect(session.place(0, 0)).toEqual({ ok: false, reason: 'occupied' });
     expect(session.stonesPlaced).toBe(1);
   });
 
-  it('refuses to place with an empty tray', () => {
+  it('refuses to place with nothing in the air', () => {
     const session = fresh();
+    session.selectColor(0);
     expect(session.place(0, 0)).toEqual({ ok: false, reason: 'no-strip' });
   });
 
   it('reports why a drop would fail without changing anything', () => {
     const session = fresh();
-    session.selectColor(0);
-    session.setStripCount(3);
+    take(session, 0, 3);
     expect(session.canPlace(0, 0)).toBe(true);
     expect(session.placementFailure(2, 0)).toBe('wrong-color');
     expect(session.placementFailure(0, 4)).toBe('out-of-bounds');
@@ -181,43 +242,34 @@ describe('placing a strip', () => {
 
   it('previews exactly the cells a drop would cover', () => {
     const session = fresh();
-    session.selectColor(0, 'vertical');
-    session.setStripCount(2);
+    take(session, 0, 2, 'vertical');
     expect(session.previewCells(0, 1)).toEqual([1, 7]);
     expect(session.previewCells(2, 1)).toBeNull();
   });
 });
 
-describe('the tray after a placement', () => {
-  it('refills with the same colour at the same length', () => {
+describe('after the stones land', () => {
+  it('empties the hand and keeps the tray on the same colour and count', () => {
     const session = fresh();
-    session.selectColor(0);
-    session.setStripCount(3);
+    take(session, 0, 3);
     session.place(0, 0);
-    expect(session.heldStrip).toEqual({ color: 0, count: 3, orientation: 'horizontal' });
+    expect(session.airborneStrip).toBeNull();
+    expect(session.traySelection).toEqual({ color: 0, count: 3 });
   });
 
-  it('keeps the orientation the player chose', () => {
+  it('shows the pile shrinking in the tray near the end of a colour', () => {
     const session = fresh();
-    session.selectColor(0, 'vertical');
-    session.setStripCount(2);
-    session.place(0, 0);
-    expect(session.heldStrip?.orientation).toBe('vertical');
-  });
-
-  it('shrinks the refill when the board owes fewer stones than the strip', () => {
-    const session = fresh();
-    session.selectColor(2);
-    session.setStripCount(2);
+    take(session, 2, 2);
     session.place(2, 3);
-    expect(session.heldStrip?.count).toBe(1);
+    expect(session.trayStones).toBe(1);
+    expect(session.traySelection?.count).toBe(2);
   });
 
-  it('empties the tray once a colour is finished', () => {
+  it('drops the selection once the colour is finished', () => {
     const session = fresh();
-    session.selectColor(1);
+    take(session, 1, 3);
     session.place(2, 0);
-    expect(session.heldStrip).toBeNull();
+    expect(session.traySelection).toBeNull();
     expect(session.remainingFor(1)).toBe(0);
     expect(session.unfinishedColors()).toEqual([0, 2]);
   });
@@ -230,15 +282,15 @@ describe('the stone economy', () => {
 
   it('keeps supply matching the board through good and bad drops', () => {
     const session = fresh();
-    session.selectColor(0);
-    session.setStripCount(4);
+    take(session, 0, 4);
     session.place(0, 0);
     expectSupplyMatchesBoard(session);
+    take(session, 0, 4);
     session.place(0, 0); // occupied
     expectSupplyMatchesBoard(session);
     session.place(2, 0); // wrong colour
     expectSupplyMatchesBoard(session);
-    session.selectColor(2);
+    take(session, 2, 3);
     session.place(2, 3);
     expectSupplyMatchesBoard(session);
   });
@@ -255,10 +307,9 @@ describe('the stone economy', () => {
 describe('placement order', () => {
   it('numbers stones consecutively in the order they went down', () => {
     const session = fresh();
-    session.selectColor(0);
-    session.setStripCount(3);
+    take(session, 0, 3);
     session.place(0, 0, 1000);
-    session.setStripCount(2);
+    take(session, 0, 2);
     session.place(1, 0, 2000);
     expect(session.placements.map((p) => p.order)).toEqual([0, 1, 2, 3, 4]);
     expect(session.placements.map((p) => p.cell)).toEqual([0, 1, 2, 6, 7]);
@@ -266,17 +317,16 @@ describe('placement order', () => {
 
   it('stamps every stone of a strip with the time of that drop', () => {
     const session = fresh();
-    session.selectColor(0);
-    session.setStripCount(2);
+    take(session, 0, 2);
     session.place(0, 0, 4242);
     expect(session.placements.map((p) => p.at)).toEqual([4242, 4242]);
   });
 
   it('records the order on the cell as well as in history', () => {
     const session = fresh();
-    session.selectColor(0);
-    session.setStripCount(1);
+    take(session, 0, 1);
     session.place(0, 1, 1);
+    take(session, 0, 1);
     session.place(0, 0, 2);
     expect(session.cellAt(0, 1).order).toBe(0);
     expect(session.cellAt(0, 0).order).toBe(1);
@@ -289,20 +339,21 @@ describe('subscription', () => {
     const listener = jest.fn();
     const unsubscribe = session.subscribe(listener);
     session.selectColor(0);
+    session.liftStrip();
     session.rotateStrip();
-    expect(listener).toHaveBeenCalledTimes(2);
-    expect(session.getRevision()).toBe(2);
+    expect(listener).toHaveBeenCalledTimes(3);
+    expect(session.getRevision()).toBe(3);
     unsubscribe();
-    session.cancelStrip();
-    expect(listener).toHaveBeenCalledTimes(2);
+    session.returnStrip();
+    expect(listener).toHaveBeenCalledTimes(3);
   });
 
   it('stays quiet when a call changes nothing', () => {
     const session = fresh();
-    session.selectColor(0);
+    take(session, 0, 3);
     const listener = jest.fn();
     session.subscribe(listener);
-    session.setStripCount(TRAY_SLOTS); // already five
+    session.setSelectionCount(3); // already three
     session.place(2, 0); // wrong colour
     expect(listener).not.toHaveBeenCalled();
   });

@@ -1,13 +1,14 @@
 import { TRAY_SLOTS, cellIndex, otherOrientation, stripCells } from './geometry';
 import type {
+  AirborneStrip,
   BoardData,
   BoardProgress,
   ColorIndex,
-  HeldStrip,
   Orientation,
   PlaceResult,
   Placement,
   PlacementFailure,
+  TraySelection,
 } from './types';
 
 export interface CellView {
@@ -31,6 +32,13 @@ export interface CellView {
  * So for every colour, `remaining === cells still empty of that colour`, and the
  * player can never run out mid-board.
  *
+ * Two pieces of held state, not one:
+ *  - the **tray selection**, a colour and how many stones the next lift takes
+ *    (one by default). Selecting costs nothing; the tray keeps showing the pile.
+ *  - the **airborne strip**, stones already lifted out of the tray. They hang in
+ *    the air until they land somewhere legal, so a drop that does not fit leaves
+ *    them where they were released rather than returning them.
+ *
  * Every placed stone carries a monotonic `order` and a timestamp, because the
  * level-complete replay re-draws the board in the player's own solving order.
  */
@@ -48,7 +56,8 @@ export class BoardSession {
 
   private readonly history: Placement[] = [];
   private nextOrder = 0;
-  private held: HeldStrip | null = null;
+  private selection: TraySelection | null = null;
+  private airborne: AirborneStrip | null = null;
   private listeners = new Set<() => void>();
   /** Bumped on every state change so React can subscribe with useSyncExternalStore. */
   private revision = 0;
@@ -102,17 +111,17 @@ export class BoardSession {
   }
 
   /**
-   * Stones of `color` still owed to the board, held ones included.
+   * Stones of `color` still owed to the board, airborne ones included.
    * Always equals the number of cells of that colour still empty.
    */
   remainingFor(color: ColorIndex): number {
     return this.requiredFor(color) - this.placedFor(color);
   }
 
-  /** Stones of `color` that can still be lifted into the tray. */
+  /** Stones of `color` still in the tray pile, so not already in the air. */
   availableFor(color: ColorIndex): number {
-    const reserved = this.held?.color === color ? this.held.count : 0;
-    return this.remainingFor(color) - reserved;
+    const inAir = this.airborne?.color === color ? this.airborne.count : 0;
+    return this.remainingFor(color) - inAir;
   }
 
   /** Colours that still have stones owed, in palette order. */
@@ -127,8 +136,7 @@ export class BoardSession {
   // --- board reads --------------------------------------------------------
 
   cellAt(row: number, col: number): CellView {
-    const index = cellIndex(row, col, this.board.width);
-    return this.cellAtIndex(index);
+    return this.cellAtIndex(cellIndex(row, col, this.board.width));
   }
 
   cellAtIndex(index: number): CellView {
@@ -165,50 +173,80 @@ export class BoardSession {
 
   // --- tray ---------------------------------------------------------------
 
-  get heldStrip(): HeldStrip | null {
-    return this.held;
+  get traySelection(): TraySelection | null {
+    return this.selection;
+  }
+
+  /** Stones the tray shows for the selected colour: the pile, capped at five. */
+  get trayStones(): number {
+    if (!this.selection) return 0;
+    return Math.min(TRAY_SLOTS, this.availableFor(this.selection.color));
   }
 
   /**
-   * Pick a colour up into the tray. Fills all five slots, or fewer when the
-   * board owes fewer than five stones of that colour. Picking a colour while
-   * another strip is held drops the old strip back into supply first — that is
-   * the only "undo", there is no separate return button.
+   * Point the tray at a colour. Takes one stone by default; a swipe across the
+   * tray sets a different count. Stones already in the air go back to the pile,
+   * since picking a colour is how the player changes their mind.
    */
-  selectColor(color: ColorIndex, orientation: Orientation = 'horizontal'): boolean {
+  selectColor(color: ColorIndex): boolean {
     if (color < 0 || color >= this.board.palette.length) return false;
-    // A held strip goes back to supply first, so the pool for the new colour is
-    // simply everything the board still owes it.
-    const count = Math.min(TRAY_SLOTS, this.remainingFor(color));
-    if (count <= 0) return false;
-    this.held = { color, count, orientation };
+    if (this.remainingFor(color) <= 0) return false;
+    this.airborne = null;
+    this.selection = { color, count: 1 };
     this.emit();
     return true;
   }
 
-  /** Trim or refill the held strip. Tapping the nth tray slot takes n stones. */
-  setStripCount(count: number): boolean {
-    if (!this.held) return false;
-    const max = Math.min(TRAY_SLOTS, this.remainingFor(this.held.color));
+  /**
+   * How many stones the next lift takes, 1..5, clamped to what the board still
+   * owes this colour. Driven by swiping sideways across the tray. Stones
+   * already in the air count towards the limit, since the next lift replaces
+   * them rather than adding to them.
+   */
+  setSelectionCount(count: number): boolean {
+    if (!this.selection) return false;
+    const max = Math.min(TRAY_SLOTS, this.remainingFor(this.selection.color));
+    if (max < 1) return false;
     const next = Math.min(Math.max(Math.round(count), 1), max);
-    if (next === this.held.count) return false;
-    this.held = { ...this.held, count: next };
+    if (next === this.selection.count) return false;
+    this.selection = { ...this.selection, count: next };
     this.emit();
     return true;
   }
 
-  /** Tapping the strip flips it between vertical and horizontal. */
+  // --- the strip in the air -----------------------------------------------
+
+  get airborneStrip(): AirborneStrip | null {
+    return this.airborne;
+  }
+
+  /**
+   * Lift the selected stones out of the tray — the upward pull at the end of
+   * the tray swipe. Anything already in the air goes back to the pile first.
+   */
+  liftStrip(orientation: Orientation = 'horizontal'): boolean {
+    if (!this.selection) return false;
+    const { color } = this.selection;
+    const pool = this.remainingFor(color);
+    const count = Math.min(this.selection.count, pool);
+    if (count < 1) return false;
+    this.airborne = { color, count, orientation };
+    this.emit();
+    return true;
+  }
+
+  /** A tap on the airborne stones flips them; they stay in the air. */
   rotateStrip(): boolean {
-    if (!this.held) return false;
-    this.held = { ...this.held, orientation: otherOrientation(this.held.orientation) };
+    if (!this.airborne) return false;
+    this.airborne = { ...this.airborne, orientation: otherOrientation(this.airborne.orientation) };
     this.emit();
     return true;
   }
 
-  /** Drop the held strip back into supply — releasing outside the grid does this. */
-  cancelStrip(): boolean {
-    if (!this.held) return false;
-    this.held = null;
+  /** Put the airborne stones back in the pile. */
+  returnStrip(): boolean {
+    if (!this.airborne) return false;
+    this.airborne = null;
     this.emit();
     return true;
   }
@@ -216,22 +254,22 @@ export class BoardSession {
   // --- placement ----------------------------------------------------------
 
   /**
-   * Cells the held strip would cover with its head on (row, col), or null when
-   * nothing is held or the strip runs off the board.
+   * Cells the airborne strip would cover with its head on (row, col), or null
+   * when nothing is in the air or the strip runs off the board.
    */
   previewCells(row: number, col: number): number[] | null {
-    if (!this.held) return null;
-    return stripCells(row, col, this.held.count, this.held.orientation, this.board);
+    if (!this.airborne) return null;
+    return stripCells(row, col, this.airborne.count, this.airborne.orientation, this.board);
   }
 
   /** Why a placement at (row, col) would fail, or null when it would succeed. */
   placementFailure(row: number, col: number): PlacementFailure | null {
-    if (!this.held) return 'no-strip';
+    if (!this.airborne) return 'no-strip';
     const cells = this.previewCells(row, col);
     if (!cells) return 'out-of-bounds';
     for (const cell of cells) {
       if (this.colorByCell[cell] !== -1) return 'occupied';
-      if (this.board.cells[cell] !== this.held.color) return 'wrong-color';
+      if (this.board.cells[cell] !== this.airborne.color) return 'wrong-color';
     }
     return null;
   }
@@ -241,34 +279,33 @@ export class BoardSession {
   }
 
   /**
-   * Lay the held strip down with its head on (row, col).
+   * Lay the airborne strip down with its head on (row, col).
    *
    * All or nothing: if any covered cell is occupied or wants another colour the
-   * whole strip stays in the tray. That is what keeps the exact-supply promise —
+   * whole strip stays in the air. That is what keeps the exact-supply promise —
    * a stone can only ever be spent on a cell that needed it.
    */
   place(row: number, col: number, at: number = Date.now()): PlaceResult {
     const failure = this.placementFailure(row, col);
     if (failure) return { ok: false, reason: failure };
 
-    const held = this.held!;
+    const strip = this.airborne!;
     const cells = this.previewCells(row, col)!;
     const placements: Placement[] = [];
     for (const cell of cells) {
-      const placement: Placement = { cell, color: held.color, order: this.nextOrder, at };
+      const placement: Placement = { cell, color: strip.color, order: this.nextOrder, at };
       this.nextOrder += 1;
-      this.colorByCell[cell] = held.color;
+      this.colorByCell[cell] = strip.color;
       this.orderByCell[cell] = placement.order;
-      this.placedPerColor[held.color] += 1;
+      this.placedPerColor[strip.color] += 1;
       this.history.push(placement);
       placements.push(placement);
     }
 
-    // Refill the tray with the same colour so the player keeps going, keeping
-    // the strip length they chose unless the board owes fewer than that now.
-    this.held = null;
-    const refill = Math.min(TRAY_SLOTS, this.remainingFor(held.color));
-    this.held = refill > 0 ? { ...held, count: Math.min(held.count, refill) } : null;
+    // The stones have landed, so the player's hand is empty again. The tray
+    // keeps the same colour and count, ready for the next swipe and pull.
+    this.airborne = null;
+    if (this.selection && this.remainingFor(this.selection.color) <= 0) this.selection = null;
 
     this.emit();
     return { ok: true, placements };

@@ -50,15 +50,15 @@ export function ColorPicker({ session, selected, onSelect }: Props) {
 
 const styles = StyleSheet.create({
   row: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 6,
     alignItems: 'center',
   },
   swatch: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.08 }],
   },
   number: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
   count: {

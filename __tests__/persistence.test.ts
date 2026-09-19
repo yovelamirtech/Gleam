@@ -9,17 +9,15 @@ import {
 } from '../src/game/persistence';
 import { BoardSession } from '../src/game/session';
 
-import { makeBoard } from './support/helpers';
+import { makeBoard, take } from './support/helpers';
 
 const board = makeBoard(['0011', '0011'], 'level-1/board-0');
 
 function played(): BoardSession {
   const session = new BoardSession(board);
-  session.selectColor(0, 'vertical');
-  session.setStripCount(2);
+  take(session, 0, 2, 'vertical');
   session.place(0, 1, 111);
-  session.selectColor(1);
-  session.setStripCount(2);
+  take(session, 1, 2);
   session.place(0, 2, 222);
   return session;
 }

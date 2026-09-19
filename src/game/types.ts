@@ -46,8 +46,20 @@ export interface Placement {
   at: number;
 }
 
-/** The stones currently lifted out of the tray and held over the board. */
-export interface HeldStrip {
+/** What the tray is pointed at: a colour, and how many stones the next lift takes. */
+export interface TraySelection {
+  color: ColorIndex;
+  /** 1..TRAY_SLOTS. One by default; a swipe across the tray changes it. */
+  count: number;
+}
+
+/**
+ * Stones lifted out of the tray and hanging in the air.
+ *
+ * They stay airborne until they land somewhere legal: a release that does not
+ * fit leaves them where the finger let go, and a tap flips them.
+ */
+export interface AirborneStrip {
   color: ColorIndex;
   /** 1..TRAY_SLOTS. */
   count: number;
@@ -55,7 +67,7 @@ export interface HeldStrip {
 }
 
 export type PlacementFailure =
-  /** Nothing is held, so there is nothing to place. */
+  /** Nothing is in the air, so there is nothing to place. */
   | 'no-strip'
   /** Some cell of the strip falls outside the board. */
   | 'out-of-bounds'

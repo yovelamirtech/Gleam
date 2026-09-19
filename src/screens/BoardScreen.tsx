@@ -1,23 +1,18 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import { runOnJS, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import AirborneStripView, { AIRBORNE_STONE } from '../components/AirborneStrip';
 import { BoardCanvas, CELL, type DropPreview } from '../components/BoardCanvas';
 import ColorPicker from '../components/ColorPicker';
-import HudTray from '../components/HudTray';
+import HudTray, { trayMetrics } from '../components/HudTray';
 import { resolveDropHead } from '../game/drop';
-import { TRAY_SLOTS } from '../game/geometry';
 import { useBoardSession } from '../hooks/useBoardSession';
-import type { BoardData } from '../game/types';
-import { darken, lighten } from '../ui/colors';
+import type { BoardData, Orientation } from '../game/types';
 import { theme } from '../ui/theme';
+import { countAtX, shouldLift } from '../ui/trayGesture';
 import {
   MAX_SCALE,
   clampViewport,
@@ -26,6 +21,9 @@ import {
   type ViewportBounds,
 } from '../ui/viewport';
 
+/** Where the strip sits relative to the finger while it is being carried. */
+const CARRY_OFFSET_Y = AIRBORNE_STONE * 1.7;
+
 interface Props {
   board: BoardData;
   /** Back to the levels screen. The board keeps its progress. */
@@ -33,28 +31,34 @@ interface Props {
 }
 
 /**
- * The board screen: a 40x40 grid you pan and zoom around, a colour picker, and
- * a five-slot tray you drag strips of stones out of.
+ * The board screen.
+ *
+ * The board takes the whole screen above a thin HUD; the exit button and the
+ * progress count float over it rather than taking a bar of their own.
  *
  * Gesture split — one finger on the board pans it, two fingers pinch to zoom,
- * and a drag that starts on the tray carries the strip. That keeps placing a
- * strip from ever fighting with moving the view.
+ * a swipe-and-pull on the tray lifts stones into the air, and the airborne
+ * stones carry their own drag and tap. Placing never fights with moving.
  */
 export function BoardScreen({ board, onExit }: Props) {
   const { session, revision, ready } = useBoardSession(board);
 
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const canvasRef = useRef<View>(null);
-  /** Where the canvas sits on screen, so a finger position can find its cell. */
+  /** Where the canvas sits on screen, so a strip position can find its cell. */
   const canvasOrigin = useRef({ x: 0, y: 0 });
   const [preview, setPreview] = useState<DropPreview | null>(null);
+  /** Orientation the next lift uses, carried over from the last rotation. */
+  const orientation = useRef<Orientation>('horizontal');
 
   const translateX = useSharedValue(0);
   const translateY = useSharedValue(0);
   const scale = useSharedValue(1);
-  const fingerX = useSharedValue(0);
-  const fingerY = useSharedValue(0);
-  const dragging = useSharedValue(0);
+  /** Screen position of the airborne strip's head. */
+  const stripX = useSharedValue(0);
+  const stripY = useSharedValue(0);
+  /** 1 once a tray swipe has pulled the stones out of the tray. */
+  const lifted = useSharedValue(0);
 
   const bounds = useMemo<ViewportBounds>(
     () => ({
@@ -66,24 +70,28 @@ export function BoardScreen({ board, onExit }: Props) {
     [canvasSize, board.width, board.height]
   );
 
-  const strip = session.heldStrip;
-  const entry = strip ? board.palette[strip.color] : null;
+  const selection = session.traySelection;
+  const airborne = session.airborneStrip;
+  const trayEntry = selection ? board.palette[selection.color] : null;
+  const airborneEntry = airborne ? board.palette[airborne.color] : null;
 
   const onCanvasLayout = useCallback(
     (event: LayoutChangeEvent) => {
       const { width, height } = event.nativeEvent.layout;
       setCanvasSize({ width, height });
-      canvasRef.current?.measureInWindow((x, y) => {
+      // Not every renderer implements measureInWindow; without it the origin
+      // stays at zero, which only matters for a real drag.
+      canvasRef.current?.measureInWindow?.((x, y) => {
         canvasOrigin.current = { x, y };
       });
-      const next = fitViewport({
+      const whole = fitViewport({
         canvasWidth: width,
         canvasHeight: height,
         boardWidth: board.width * CELL,
         boardHeight: board.height * CELL,
       });
       // Start zoomed in enough to read the numbers, centred on the board.
-      const start = zoomAround(next, width / 2, height / 2, Math.min(MAX_SCALE, next.scale * 2.2), {
+      const start = zoomAround(whole, width / 2, height / 2, Math.min(MAX_SCALE, whole.scale * 2.2), {
         canvasWidth: width,
         canvasHeight: height,
         boardWidth: board.width * CELL,
@@ -96,12 +104,12 @@ export function BoardScreen({ board, onExit }: Props) {
     [board.width, board.height, scale, translateX, translateY]
   );
 
-  /** Screen point to the cell the strip head would land on. */
+  /** Cell the strip's head sits over, from the head's own screen position. */
   const headAt = useCallback(
-    (screenX: number, screenY: number) =>
-      resolveDropHead(screenX, screenY, {
+    (headX: number, headY: number) =>
+      resolveDropHead(headX + AIRBORNE_STONE / 2, headY + AIRBORNE_STONE / 2, {
         board,
-        strip: session.heldStrip,
+        strip: session.airborneStrip,
         canvasOrigin: canvasOrigin.current,
         canvasSize,
         viewport: {
@@ -110,67 +118,120 @@ export function BoardScreen({ board, onExit }: Props) {
           scale: scale.value,
         },
         cellSize: CELL,
+        fingerOffsetCells: 0,
       }),
     [session, board, canvasSize, translateX, translateY, scale]
   );
 
   const updatePreview = useCallback(
-    (screenX: number, screenY: number) => {
-      const held = session.heldStrip;
-      const head = headAt(screenX, screenY);
-      if (!held || !head) {
+    (headX: number, headY: number) => {
+      const strip = session.airborneStrip;
+      const head = strip ? headAt(headX, headY) : null;
+      if (!strip || !head) {
         setPreview(null);
         return;
       }
       setPreview({
         row: head.row,
         col: head.col,
-        count: held.count,
-        orientation: held.orientation,
-        color: held.color,
-        hex: board.palette[held.color].hex,
+        count: strip.count,
+        orientation: strip.orientation,
+        color: strip.color,
+        hex: board.palette[strip.color].hex,
         valid: session.canPlace(head.row, head.col),
       });
     },
     [session, board.palette, headAt]
   );
 
+  /**
+   * Try to land the stones. A drop that does not fit — off the board, over the
+   * HUD, or onto cells wanting another colour — leaves them hanging where they
+   * were released, so nothing is consumed and nothing snaps back.
+   */
   const commitDrop = useCallback(
-    (screenX: number, screenY: number) => {
+    (headX: number, headY: number) => {
       setPreview(null);
-      const head = headAt(screenX, screenY);
-      // The tray is the strip: releasing off the grid, or onto cells that want
-      // another colour, simply leaves the stones where they were. Nothing is
-      // consumed on a miss, which is what keeps the supply exact.
+      const head = headAt(headX, headY);
       if (!head) return;
       session.place(head.row, head.col);
     },
     [session, headAt]
   );
 
-  const dragGesture = useMemo(
+  const setCountFromTrayX = useCallback(
+    (x: number) => {
+      session.setSelectionCount(countAtX(x, trayMetrics));
+    },
+    [session]
+  );
+
+  const liftStones = useCallback(
+    (headX: number, headY: number) => {
+      if (!session.liftStrip(orientation.current)) return;
+      updatePreview(headX, headY);
+    },
+    [session, updatePreview]
+  );
+
+  const rotateStones = useCallback(() => {
+    if (!session.rotateStrip()) return;
+    orientation.current = session.airborneStrip?.orientation ?? orientation.current;
+  }, [session]);
+
+  // --- gestures -----------------------------------------------------------
+
+  const trayGesture = useMemo(
     () =>
       Gesture.Pan()
         .onBegin((event) => {
-          fingerX.value = event.absoluteX;
-          fingerY.value = event.absoluteY;
-          dragging.value = withTiming(1, { duration: 90 });
-          runOnJS(updatePreview)(event.absoluteX, event.absoluteY);
+          lifted.value = 0;
+          runOnJS(setCountFromTrayX)(event.x);
         })
         .onUpdate((event) => {
-          fingerX.value = event.absoluteX;
-          fingerY.value = event.absoluteY;
-          runOnJS(updatePreview)(event.absoluteX, event.absoluteY);
+          const headX = event.absoluteX - AIRBORNE_STONE / 2;
+          const headY = event.absoluteY - CARRY_OFFSET_Y;
+          if (lifted.value === 0) {
+            if (shouldLift(event.translationY)) {
+              lifted.value = 1;
+              stripX.value = headX;
+              stripY.value = headY;
+              runOnJS(liftStones)(headX, headY);
+            } else {
+              runOnJS(setCountFromTrayX)(event.x);
+            }
+            return;
+          }
+          stripX.value = headX;
+          stripY.value = headY;
+          runOnJS(updatePreview)(headX, headY);
         })
         .onEnd((event) => {
-          dragging.value = 0;
-          runOnJS(commitDrop)(event.absoluteX, event.absoluteY);
+          if (lifted.value === 0) return;
+          runOnJS(commitDrop)(event.absoluteX - AIRBORNE_STONE / 2, event.absoluteY - CARRY_OFFSET_Y);
         })
         .onFinalize(() => {
-          dragging.value = 0;
+          lifted.value = 0;
         }),
-    [commitDrop, dragging, fingerX, fingerY, updatePreview]
+    [commitDrop, lifted, liftStones, setCountFromTrayX, stripX, stripY, updatePreview]
   );
+
+  const airborneGesture = useMemo(() => {
+    const drag = Gesture.Pan()
+      .onChange((event) => {
+        stripX.value += event.changeX;
+        stripY.value += event.changeY;
+        runOnJS(updatePreview)(stripX.value, stripY.value);
+      })
+      .onEnd(() => {
+        runOnJS(commitDrop)(stripX.value, stripY.value);
+      });
+    const tap = Gesture.Tap().onEnd(() => {
+      runOnJS(rotateStones)();
+    });
+    // A drag beats a tap, so carrying the stones never reads as a rotation.
+    return Gesture.Exclusive(drag, tap);
+  }, [commitDrop, rotateStones, stripX, stripY, updatePreview]);
 
   const viewportGesture = useMemo(() => {
     const pan = Gesture.Pan()
@@ -204,98 +265,85 @@ export function BoardScreen({ board, onExit }: Props) {
     return Gesture.Simultaneous(pan, pinch);
   }, [bounds, scale, translateX, translateY]);
 
-  const floatingStripStyle = useAnimatedStyle(() => ({
-    opacity: dragging.value,
-    transform: [
-      { translateX: fingerX.value - CELL / 2 },
-      { translateY: fingerY.value - CELL * 2 },
-    ],
-  }));
-
   const handleSelectColor = useCallback(
     (color: number) => {
-      session.selectColor(color, session.heldStrip?.orientation ?? 'horizontal');
+      session.selectColor(color);
     },
     [session]
   );
 
-  const stripHex = entry?.hex ?? theme.accent;
-  const complete = session.isComplete();
-
   return (
-    <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <Pressable
-          onPress={onExit}
-          accessibilityRole="button"
-          accessibilityLabel="Back to levels"
-          testID="exit-board"
-          style={styles.exit}
-        >
-          <Text style={styles.exitLabel}>Back</Text>
-        </Pressable>
-        <Text style={styles.progress} testID="board-progress">
-          {session.stonesPlaced} / {session.stonesTotal}
-        </Text>
-      </View>
+    // The airborne stones sit outside the safe-area view on purpose: they are
+    // positioned in screen coordinates, and a padded parent would shift them.
+    <View style={styles.screen}>
+      <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+        <View style={styles.boardArea}>
+          <GestureDetector gesture={viewportGesture}>
+            <View
+              ref={canvasRef}
+              testID="board-surface"
+              style={styles.canvasWrap}
+              onLayout={onCanvasLayout}
+            >
+              {canvasSize.width > 0 ? (
+                <BoardCanvas
+                  session={session}
+                  revision={revision}
+                  preview={preview}
+                  width={canvasSize.width}
+                  height={canvasSize.height}
+                  translateX={translateX}
+                  translateY={translateY}
+                  scale={scale}
+                />
+              ) : null}
+            </View>
+          </GestureDetector>
 
-      <GestureDetector gesture={viewportGesture}>
-        <View ref={canvasRef} style={styles.canvasWrap} onLayout={onCanvasLayout}>
-          {canvasSize.width > 0 ? (
-            <BoardCanvas
-              session={session}
-              revision={revision}
-              preview={preview}
-              width={canvasSize.width}
-              height={canvasSize.height}
-              translateX={translateX}
-              translateY={translateY}
-              scale={scale}
-            />
-          ) : null}
-          {complete ? (
+          <Pressable
+            onPress={onExit}
+            accessibilityRole="button"
+            accessibilityLabel="Back to levels"
+            testID="exit-board"
+            style={styles.exit}
+          >
+            <Text style={styles.exitLabel}>Back</Text>
+          </Pressable>
+          <Text style={styles.progress} testID="board-progress">
+            {session.stonesPlaced} / {session.stonesTotal}
+          </Text>
+          {session.isComplete() ? (
             <View style={styles.completeBanner} testID="board-complete">
               <Text style={styles.completeText}>Board complete</Text>
             </View>
           ) : null}
           {!ready ? <View style={styles.loading} testID="board-loading" /> : null}
         </View>
-      </GestureDetector>
 
-      <ColorPicker session={session} selected={strip?.color ?? null} onSelect={handleSelectColor} />
+        <ColorPicker
+          session={session}
+          selected={selection?.color ?? null}
+          onSelect={handleSelectColor}
+        />
 
-      <HudTray
-        strip={strip}
-        entry={entry}
-        remaining={strip ? session.remainingFor(strip.color) : 0}
-        onRotate={() => session.rotateStrip()}
-        onSetCount={(count) => session.setStripCount(Math.min(count, TRAY_SLOTS))}
-        dragGesture={dragGesture}
+        <HudTray
+          selection={selection}
+          entry={trayEntry}
+          stones={session.trayStones}
+          count={selection?.count ?? 0}
+          gesture={trayGesture}
+        />
+
+      </SafeAreaView>
+
+      <AirborneStripView
+        strip={airborne}
+        entry={airborneEntry}
+        x={stripX}
+        y={stripY}
+        gesture={airborneGesture}
       />
-
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.floating,
-          { flexDirection: strip?.orientation === 'vertical' ? 'column' : 'row' },
-          floatingStripStyle,
-        ]}
-      >
-        {strip
-          ? Array.from({ length: strip.count }, (_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.floatingStone,
-                  { backgroundColor: stripHex, borderColor: darken(stripHex, 0.3) },
-                ]}
-              >
-                <View style={[styles.floatingGleam, { backgroundColor: lighten(stripHex, 0.6) }]} />
-              </View>
-            ))
-          : null}
-      </Animated.View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -304,37 +352,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.appBackground,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  exit: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    backgroundColor: theme.panel,
-    borderWidth: 1,
-    borderColor: theme.panelBorder,
-  },
-  exitLabel: {
-    color: theme.text,
-    fontWeight: '600',
-  },
-  progress: {
-    color: theme.textMuted,
-    fontVariant: ['tabular-nums'],
+  boardArea: {
+    flex: 1,
   },
   canvasWrap: {
     flex: 1,
-    margin: 12,
-    borderRadius: 16,
     overflow: 'hidden',
     backgroundColor: theme.boardBackground,
-    borderWidth: 1,
-    borderColor: theme.panelBorder,
   },
   loading: {
     position: 'absolute',
@@ -344,6 +368,28 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: theme.appBackground,
     opacity: 0.7,
+  },
+  exit: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: theme.panel,
+    borderWidth: 1,
+    borderColor: theme.panelBorder,
+  },
+  exitLabel: {
+    color: theme.text,
+    fontWeight: '600',
+  },
+  progress: {
+    position: 'absolute',
+    top: 16,
+    right: 14,
+    color: theme.textMuted,
+    fontVariant: ['tabular-nums'],
   },
   completeBanner: {
     position: 'absolute',
@@ -357,25 +403,6 @@ const styles = StyleSheet.create({
   completeText: {
     color: '#ffffff',
     fontWeight: '700',
-  },
-  floating: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-  },
-  floatingStone: {
-    width: CELL,
-    height: CELL,
-    borderRadius: 6,
-    borderWidth: 1.5,
-  },
-  floatingGleam: {
-    position: 'absolute',
-    top: 3,
-    left: 3,
-    width: CELL * 0.3,
-    height: CELL * 0.22,
-    borderRadius: CELL * 0.15,
   },
 });
 
