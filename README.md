@@ -113,3 +113,11 @@ node prep-images.mjs ~/art/            # a whole folder at once
 The palette is chosen once over the whole image before it is cut into boards,
 so colours line up across board seams. See the tool's
 [README](tools/prep-images/README.md) for the data format the app reads.
+
+## App icon
+
+`assets/icon.png` and the Android adaptive/monochrome/favicon variants are
+generated, not drawn by hand — see [`tools/app-icon`](tools/app-icon/README.md).
+It is a small cluster of the same faux-3D gem the board draws
+(`src/ui/drawStone.ts`), in the app's own accent colours, so the icon can
+never drift from what the game actually looks like.
