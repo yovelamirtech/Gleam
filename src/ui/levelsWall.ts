@@ -16,8 +16,16 @@ export function levelTilePosition(levelId: number): { x: number; y: number } {
 /**
  * Which level tile a wall-space point falls in, or `null` off the wall
  * entirely - callers decide what an off-wall tap means (nothing, here).
+ *
+ * Called directly from `LevelsScreen`'s tap gesture's `onEnd` worklet, which
+ * runs on the UI thread, not the JS thread - a plain (non-worklet) function
+ * called that way isn't just unreliable, it crashes the whole app natively
+ * under Reanimated 4 (the worklet runtime can't resolve a function it was
+ * never given a workletised copy of). `'worklet'` here, like every function
+ * in `viewport.ts`, is what makes that call safe.
  */
 export function levelAtPoint(x: number, y: number): number | null {
+  'worklet';
   if (x < 0 || y < 0 || x >= WALL_WIDTH || y >= WALL_HEIGHT) return null;
   const col = Math.floor(x / LEVEL_TILE);
   const row = Math.floor(y / LEVEL_TILE);

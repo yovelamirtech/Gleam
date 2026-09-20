@@ -19,6 +19,17 @@ const mockRequestPurchase = jest.fn();
 const mockFinishTransaction = jest.fn();
 const mockRestorePurchases = jest.fn();
 
+// isIapAvailable() (src/hooks/usePurchases.tsx) checks this before ever
+// calling useIAP - these tests are about the live-IAP behaviour, so it
+// always resolves here.
+jest.mock('expo-modules-core', () => {
+  const actual = jest.requireActual('expo-modules-core');
+  return {
+    ...actual,
+    requireNativeModule: jest.fn((name: string) => (name === 'ExpoIap' ? {} : actual.requireNativeModule(name))),
+  };
+});
+
 jest.mock('expo-iap', () => ({
   useIAP: (options?: { onPurchaseSuccess?: (purchase: { productId: string }) => void }) => {
     capturedOnPurchaseSuccess = options?.onPurchaseSuccess ?? null;

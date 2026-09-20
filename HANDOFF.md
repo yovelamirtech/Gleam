@@ -308,7 +308,37 @@ point forward.
 
 ## On-device checklist
 
-Nothing in this project has been run on a real device or simulator this
+The user's first real on-device test (iPhone, Expo Go) surfaced three real
+crashes, all fixed on this branch (see this PR's own description for full
+detail on each):
+
+1. **Crash on first touch** — no `metro.config.js` existed, so Expo's
+   default (`inlineRequires` off) left `react-native-worklets` unable to
+   initialise. Fixed with a new `metro.config.js`.
+2. **Crash on IAP init** (`Cannot find native module 'ExpoIap'`) —
+   `expo-iap`'s `useIAP()` resolves its native module before its own
+   `initConnection` try/catch, throwing an unhandled promise rejection when
+   it's missing. `src/hooks/usePurchases.tsx`'s `PurchasesProvider` now
+   checks availability itself before ever calling `useIAP`.
+3. **The real remaining crash, confirmed from the device's own `.ips` crash
+   log** (Settings -> Privacy & Security -> Analytics & Improvements ->
+   Analytics Data on the phone itself - Metro's own terminal showed nothing
+   at all for this one): `LevelsScreen`'s tap gesture called
+   `levelAtPoint()` (`src/ui/levelsWall.ts`) directly from its `onEnd`
+   worklet, but that function was never marked `'worklet'` - unlike every
+   other cross-thread helper in this codebase (`src/ui/viewport.ts`). Under
+   Reanimated 4 that's a genuine native crash (`abort()` via an uncaught JS
+   exception inside `runSyncOnRuntime`), not an Expo Go quirk, and it's been
+   in already-merged `main` code since the earlier unified-levels-wall PR
+   (#10) - it just never got exercised on a real device before now. Fixed
+   by adding the `'worklet'` directive.
+
+**Still not confirmed fixed end to end on a real device** as of this note -
+this was the third attempt at this crash, and the `.ips` file's precision
+makes fix #3 a much stronger candidate than the first two, but only a real
+device can confirm the app is actually stable now.
+
+Nothing else in this project has been run on a real device or simulator this
 whole build (remote container, nothing attached) — every item below is
 still open, gathered here in one place per the user's request, to go
 through together once a device is available rather than repeating
