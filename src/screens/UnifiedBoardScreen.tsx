@@ -48,6 +48,9 @@ const PREVIEW_BOARD_PX = BOARD_CELLS_X * PREVIEW_SCALE_PX;
  * smaller on screen.
  */
 const ARTWORK_SCALE = CELL / PREVIEW_SCALE_PX;
+/** The whole level's `preview.png` at its own native resolution (960x720 for an 8x6 wall of 40-cell boards at 3px/cell). */
+const WALL_ARTWORK_NATIVE_WIDTH = BOARDS_X * PREVIEW_BOARD_PX;
+const WALL_ARTWORK_NATIVE_HEIGHT = BOARDS_Y * PREVIEW_BOARD_PX;
 
 /**
  * The unified board wall (HANDOFF.md item 8): every board of a level's full
@@ -74,6 +77,13 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
   const [progress, setProgress] = useState<Progress>(initialProgress);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [activeBoardId, setActiveBoardId] = useState<number | null>(null);
+  // Temporary on-screen diagnostic (HANDOFF.md item 17/19): the board wall has
+  // read as blank on every real device so far regardless of how the artwork
+  // itself was rendered (three different techniques, same symptom), which
+  // points at the wall's own fit-to-screen viewport rather than the artwork -
+  // but that can't be confirmed from this environment at all. Remove once a
+  // real device confirms which one it actually is.
+  const [debugInfo, setDebugInfo] = useState('layout pending');
   const insets = useSafeAreaInsets();
   const prepared = preparedLevelFor(levelId);
 
@@ -144,6 +154,10 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
       translateX.value = start.translateX;
       translateY.value = start.translateY;
       scale.value = start.scale;
+      setDebugInfo(
+        `canvas ${width.toFixed(0)}x${height.toFixed(0)} wall ${WALL_PX_WIDTH}x${WALL_PX_HEIGHT} ` +
+          `scale ${start.scale.toFixed(4)} tx ${start.translateX.toFixed(1)} ty ${start.translateY.toFixed(1)}`
+      );
     },
     [targetBoardId, translateX, translateY, scale]
   );
@@ -256,10 +270,22 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
                 style={[
                   styles.wallArtworkImage,
                   {
-                    width: BOARDS_X * PREVIEW_BOARD_PX,
-                    height: BOARDS_Y * PREVIEW_BOARD_PX,
-                    transform: [{ scale: ARTWORK_SCALE }],
-                    transformOrigin: '0 0',
+                    width: WALL_ARTWORK_NATIVE_WIDTH,
+                    height: WALL_ARTWORK_NATIVE_HEIGHT,
+                    // Same visual result as `transform: [{scale}],
+                    // transformOrigin: '0 0'` (still untested on a real
+                    // device - see the debugInfo comment above), but built
+                    // from only `scale`/`translate`, which every RN version
+                    // has always supported: RN's own `{scale}` anchors at the
+                    // element's *centre* by default, landing its top-left
+                    // corner at centre*(1-scale) instead of the origin; the
+                    // translate below cancels exactly that offset so the
+                    // scaled image's top-left corner stays put.
+                    transform: [
+                      { scale: ARTWORK_SCALE },
+                      { translateX: (WALL_ARTWORK_NATIVE_WIDTH / 2) * (ARTWORK_SCALE - 1) },
+                      { translateY: (WALL_ARTWORK_NATIVE_HEIGHT / 2) * (ARTWORK_SCALE - 1) },
+                    ],
                   },
                 ]}
               />
@@ -290,6 +316,10 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
             {activeBoardId !== null && !showGameplay
               ? 'Locked - finish a neighbouring board to open it.'
               : 'Pinch in on a board to play it, out to see the whole picture.'}
+          </Text>
+          {/* Temporary diagnostic, see the debugInfo comment above - remove once confirmed. */}
+          <Text style={styles.debugText} testID="board-wall-debug">
+            {debugInfo}
           </Text>
         </View>
         <SettingsButton onPress={() => navigation.navigate('Settings')} />
@@ -372,6 +402,13 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textShadowColor: colors.background,
     textShadowRadius: 6,
+  },
+  // Temporary diagnostic text style, see the debugInfo comment above.
+  debugText: {
+    fontSize: 11,
+    color: colors.danger,
+    marginTop: 4,
+    fontVariant: ['tabular-nums'],
   },
   tile: {
     position: 'absolute',
