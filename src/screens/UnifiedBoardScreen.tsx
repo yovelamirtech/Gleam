@@ -31,7 +31,13 @@ import {
   centreBoardAt,
   isPlayableScale,
 } from '../ui/unifiedBoard';
-import { clampViewport, fitViewport, zoomAround, type ViewportBounds } from '../ui/viewport';
+import {
+  clampViewport,
+  fitViewport,
+  viewportTransform,
+  zoomAround,
+  type ViewportBounds,
+} from '../ui/viewport';
 import BoardScreen from './BoardScreen';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Boards'>;
@@ -77,12 +83,14 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
   const [progress, setProgress] = useState<Progress>(initialProgress);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [activeBoardId, setActiveBoardId] = useState<number | null>(null);
-  // Temporary on-screen diagnostic (HANDOFF.md item 17/19): the board wall has
-  // read as blank on every real device so far regardless of how the artwork
-  // itself was rendered (three different techniques, same symptom), which
-  // points at the wall's own fit-to-screen viewport rather than the artwork -
-  // but that can't be confirmed from this environment at all. Remove once a
-  // real device confirms which one it actually is.
+  // Temporary on-screen diagnostic (HANDOFF.md item 17/19): this is what
+  // actually found the real bug - the readout showed a perfectly correct
+  // viewport (scale/translate exactly matching a manual fitViewport
+  // calculation) on a screen that still rendered nothing, which pointed at
+  // how that viewport gets *applied* (viewportTransform, `viewport.ts`)
+  // rather than at the viewport maths or the artwork rendering technique.
+  // Left in for one more round pending on-device confirmation of that fix;
+  // remove once confirmed.
   const [debugInfo, setDebugInfo] = useState('layout pending');
   const insets = useSafeAreaInsets();
   const prepared = preparedLevelFor(levelId);
@@ -198,11 +206,11 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
   }, [bounds.canvasWidth, bounds.canvasHeight, scale, translateX, translateY, updateActiveBoard]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { scale: scale.value },
-    ],
+    transform: viewportTransform(
+      { translateX: translateX.value, translateY: translateY.value, scale: scale.value },
+      WALL_PX_WIDTH,
+      WALL_PX_HEIGHT
+    ),
   }));
 
   const activeStatus = activeBoardId !== null ? boardStatus(progress, levelId, activeBoardId) : 'locked';
