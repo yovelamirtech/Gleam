@@ -24,7 +24,13 @@ import {
   levelAtPoint,
   levelTilePosition,
 } from '../ui/levelsWall';
-import { clampViewport, fitViewport, zoomAround, type ViewportBounds } from '../ui/viewport';
+import {
+  clampViewport,
+  fitViewport,
+  viewportTransform,
+  zoomAround,
+  type ViewportBounds,
+} from '../ui/viewport';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Levels'>;
 
@@ -137,11 +143,11 @@ export default function LevelsScreen({ navigation }: Props) {
   }, [bounds.canvasWidth, bounds.canvasHeight, handleTap, scale, translateX, translateY]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { scale: scale.value },
-    ],
+    transform: viewportTransform(
+      { translateX: translateX.value, translateY: translateY.value, scale: scale.value },
+      WALL_WIDTH,
+      WALL_HEIGHT
+    ),
   }));
 
   return (
