@@ -563,6 +563,80 @@ through together once a device is available rather than repeating
     and multi-board-rendering redesign described above, not a rewrite of
     what this round added.
 
+17. **Three real on-device bugs found and fixed after item 16 shipped**,
+    all from the user's first actual walkthrough (PRs #13, #14, #15,
+    #16 - all merged to `main`):
+    - **Levels wall pan/tap felt broken** (`src/screens/LevelsScreen.tsx`):
+      its gesture was `Gesture.Simultaneous(Gesture.Exclusive(tap, pan),
+      pinch)`. `Exclusive(tap, pan)` makes `pan` `requireToFail` the tap, so
+      a drag couldn't start moving the wall until the tap gesture resolved
+      or timed out (~500ms) on its own - read as "stuck unless you hold
+      still a moment first, then it works." Fixed with `Gesture.Race(pan,
+      tap)` - a plain native race, no `requireToFail` chain, both gestures
+      watch the touch from frame one.
+    - **Board wall (`UnifiedBoardScreen.tsx`) rendered blank white, content
+      pushed off-screen**: each of 48 `BoardTile`s gave its `<Image>` a
+      native `width`/`height` equal to the tile's *upscaled* wall-space
+      pixel size (`ARTWORK_SCALE` = 8x, ~44 megapixels) - 48 simultaneous
+      decodes of the same source image at that size blew through real
+      device memory (silently no-ops in a simulator/test environment,
+      which is why it went undetected). Fixed by decoding the `<Image>` at
+      its cheap native resolution and reaching the same visual size with a
+      GPU `transform: scale(ARTWORK_SCALE)` anchored at `transformOrigin:
+      '0 0'` instead of via `width`/`height` - same crop/position math,
+      ~48x less decode work.
+    - **Board wall tiles still invisible even after that fix**: the wall's
+      fit-to-screen scale is roughly 1/20 (48 boards on one canvas), which
+      shrank the tile's `0.5`-unit border to sub-pixel and made the
+      placeholder/locked fill colours (`colors.surface`, `colors.locked`)
+      read as identical to `colors.background` once flattened by that
+      scale. Compounded by a separate, pre-existing bug: `centreLevelId()`
+      (see item 18 below, now fixed) put the wall's *only* initially
+      unlocked level on a level with no prepared artwork yet, so the
+      placeholder path was the very first thing anyone saw. Fixed by
+      widening the border (as a fraction of tile size, so it survives the
+      scale-down) with more contrast, and picking placeholder/locked fill
+      colours that stay visibly different from the background after that
+      flattening.
+
+    All three were diagnosed from what the user could actually share from a
+    real device (a Metro terminal log, an `.ips` crash log, a screenshot) -
+    none of them were reproducible or even visible from this remote
+    container. **Confirm on a real device before assuming any of them are
+    fully done** - especially the tile border/colour tuning, which was
+    picked by reasoning about the maths, not by looking at a real screen.
+
+18. **Levels wall centre was a level with no prepared artwork, by
+    construction** — `centreLevelId()` (`src/storage/progress.ts`) used to
+    compute the wall's actual middle grid cell directly (row/col math,
+    landing on id 10, "Level 11"), independent of `PREPARED_LEVELS`
+    (`src/game/levels/index.ts`), which only covers ids 0-6. So the one
+    level every fresh install starts unlocked on was guaranteed to be
+    unprepared placeholder content - not a crash, just a confusing first
+    impression (see item 17's third bullet above, which this compounded).
+    Per the user's explicit ask ("Level 1 in the middle, 2/3/etc next to
+    it"), level ids are now handed out by *distance from the wall's centre*
+    instead of row-major order: id 0 is always the centre tile (so
+    `centreLevelId()` is now just `0`), and ids 1-8 fill the ring of eight
+    tiles directly touching it (`src/game/levelLayout.ts`, new -
+    `LEVEL_POSITIONS`/`levelPosition`/`levelIdAt`, shared by
+    `src/ui/levelsWall.ts` for tile geometry/hit-testing and
+    `src/storage/progress.ts` for neighbour-unlock math, replacing both
+    files' own row/col arithmetic). Practical effect: `PREPARED_LEVELS[0]`
+    (`sample-lagoon`) is now the centre tile everyone starts on, and
+    `PREPARED_LEVELS[1..6]` land in that immediate ring, so the first seven
+    levels a player can reach are guaranteed to be the seven that actually
+    have artwork - `PREPARED_LEVELS[7]` onward (there are none past index 6
+    yet) would spill into placeholder tiles further out. `levelIdAt` looks
+    up a plain array, not a `Map` - it's called from `levelAtPoint`, a
+    worklet, and a captured `Map` doesn't cross the UI-thread worklet
+    boundary the way a plain array does (see item 17's crash-diagnosis
+    history above for why that distinction matters here specifically).
+    Existing tests that hard-coded the old row-major layout
+    (`__tests__/levelsWall.test.ts`, `__tests__/progress.test.ts`,
+    `__tests__/LevelsScreen.test.tsx`) were updated to the new centre-first
+    geometry rather than deleted. **Not yet confirmed on a real device.**
+
 ## Next up
 
 **Start with item 8 below** (the board-level half of the unified wall) —
