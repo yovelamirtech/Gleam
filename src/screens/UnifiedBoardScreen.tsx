@@ -130,13 +130,35 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
   const onLayout = useCallback(
     (event: LayoutChangeEvent) => {
       const { width, height } = event.nativeEvent.layout;
-      setCanvasSize({ width, height });
       const layoutBounds: ViewportBounds = {
         canvasWidth: width,
         canvasHeight: height,
         boardWidth: WALL_PX_WIDTH,
         boardHeight: WALL_PX_HEIGHT,
       };
+
+      // `wallWrap` also relayouts whenever the banner ad below it mounts or
+      // unmounts (it hides the instant a board becomes playable) - onLayout
+      // used to always jump the viewport back to `fitViewport` on *every*
+      // call, which undid the player's zoom the moment a board they zoomed
+      // into actually became playable, dropping scale back under
+      // `PLAYABLE_SCALE` and kicking them straight back out to the wall.
+      // Only the very first layout should set an initial viewport; a later
+      // resize just reclamps whatever the player already has, so it doesn't
+      // erase a live pan/zoom for a size change that has nothing to do with it.
+      const isInitialLayout = canvasSize.width === 0;
+      setCanvasSize({ width, height });
+
+      if (!isInitialLayout) {
+        const reclamped = clampViewport(
+          { translateX: translateX.value, translateY: translateY.value, scale: scale.value },
+          layoutBounds
+        );
+        translateX.value = reclamped.translateX;
+        translateY.value = reclamped.translateY;
+        scale.value = reclamped.scale;
+        return;
+      }
 
       // Dev-tools shortcut (DevToolsScreen's "jump to a board"): start already
       // zoomed in and playing that board, instead of the whole wall's fit view.
@@ -167,7 +189,7 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
           `scale ${start.scale.toFixed(4)} tx ${start.translateX.toFixed(1)} ty ${start.translateY.toFixed(1)}`
       );
     },
-    [targetBoardId, translateX, translateY, scale]
+    [targetBoardId, translateX, translateY, scale, canvasSize.width]
   );
 
   const gesture = useMemo(() => {
@@ -310,23 +332,25 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
       </GestureDetector>
 
       <View style={[styles.header, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
-        <View>
-          <Text style={styles.title}>{prepared?.name ?? `Level ${levelId + 1}`}</Text>
-          <Text style={styles.subtitle}>
+        {/* Left, not right: Expo Go's own floating dev-menu bubble also sits
+            in the top-right corner on a real device, and covers ours there. */}
+        <SettingsButton onPress={() => navigation.navigate('Settings')} />
+        <View style={styles.titleBlock}>
+          <Text style={[styles.title, styles.textRight]}>{prepared?.name ?? `Level ${levelId + 1}`}</Text>
+          <Text style={[styles.subtitle, styles.textRight]}>
             {activeBoardId !== null && !showGameplay
               ? 'Locked - finish a neighbouring board to open it.'
               : 'Pinch in on a board to play it, out to see the whole picture.'}
           </Text>
           {/* Temporary diagnostic, see the debugInfo comment above - remove once confirmed. */}
-          <Text style={styles.debugText} testID="board-wall-debug">
+          <Text style={[styles.debugText, styles.textRight]} testID="board-wall-debug">
             {debugInfo}
           </Text>
         </View>
-        <SettingsButton onPress={() => navigation.navigate('Settings')} />
       </View>
 
       {!showGameplay ? (
-        <View style={{ paddingBottom: insets.bottom }} pointerEvents="box-none">
+        <View style={[styles.adBar, { paddingBottom: insets.bottom }]} pointerEvents="box-none">
           <BannerAdBox />
         </View>
       ) : null}
@@ -389,6 +413,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     paddingHorizontal: 16,
   },
+  titleBlock: { flexShrink: 1 },
+  textRight: { textAlign: 'right' },
   title: {
     fontSize: 24,
     fontWeight: '700',
@@ -403,6 +429,10 @@ const styles = StyleSheet.create({
     textShadowColor: colors.background,
     textShadowRadius: 6,
   },
+  // Absolute, like `header` - mounting/unmounting the ad (it hides once a
+  // board becomes playable) must never resize `wallWrap`'s own flex layout,
+  // since that would re-fire its `onLayout` and reclamp the player's zoom.
+  adBar: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   // Temporary diagnostic text style, see the debugInfo comment above.
   debugText: {
     fontSize: 11,

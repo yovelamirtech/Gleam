@@ -174,11 +174,13 @@ export default function LevelsScreen({ navigation }: Props) {
       </GestureDetector>
 
       <View style={[styles.header, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
-        <View>
-          <Text style={styles.title}>Levels</Text>
-          <Text style={styles.subtitle}>Pinch to zoom, drag to look around.</Text>
-        </View>
+        {/* Left, not right: Expo Go's own floating dev-menu bubble also sits
+            in the top-right corner on a real device, and covers ours there. */}
         <SettingsButton onPress={() => navigation.navigate('Settings')} />
+        <View style={styles.titleBlock}>
+          <Text style={[styles.title, styles.textRight]}>Levels</Text>
+          <Text style={[styles.subtitle, styles.textRight]}>Pinch to zoom, drag to look around.</Text>
+        </View>
       </View>
 
       <View style={{ paddingBottom: insets.bottom }}>
@@ -243,6 +245,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     paddingHorizontal: 16,
   },
+  titleBlock: { flexShrink: 1 },
+  textRight: { textAlign: 'right' },
   title: {
     fontSize: 28,
     fontWeight: '700',
