@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import React from 'react';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
@@ -55,9 +55,9 @@ describe('LevelsScreen (unified wall)', () => {
 
   it('starts with only the centre level unlocked', async () => {
     await renderWall();
-    // The centre tile shows its own number, not a lock.
-    expect(screen.getByText(String(centreLevelId() + 1))).toBeTruthy();
-    // A corner tile (id 0) is locked.
+    // The centre tile (level 0, "Level 1") has no lock overlay.
+    expect(within(screen.getByTestId(`level-tile-${centreLevelId()}`)).queryByText('🔒')).toBeNull();
+    // Every other level is locked.
     const lockIcons = screen.getAllByText('🔒');
     expect(lockIcons.length).toBe(19);
   });
@@ -80,9 +80,10 @@ describe('LevelsScreen (unified wall)', () => {
   it('does nothing when a locked tile is tapped', async () => {
     (navigation as unknown as { navigate: jest.Mock }).navigate.mockClear();
     await renderWall();
-    // Screen point over the middle of level 0's tile (wall-space 100,100),
-    // through the same fit-to-screen viewport as the centre-tile test above.
-    // Locked at a fresh start.
+    // Screen point over the middle of the wall's top-left tile (wall-space
+    // 100,100, not level 0 any more - the centre tile is), through the same
+    // fit-to-screen viewport as the centre-tile test above. Locked at a
+    // fresh start.
     tapAt(49, 105);
     expect((navigation as unknown as { navigate: jest.Mock }).navigate).not.toHaveBeenCalled();
   });

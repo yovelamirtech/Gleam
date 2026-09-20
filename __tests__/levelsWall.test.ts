@@ -1,11 +1,22 @@
-import { LEVELS_X, LEVEL_COUNT } from '../src/constants/board';
+import { LEVELS_X, LEVELS_Y, LEVEL_COUNT } from '../src/constants/board';
 import { LEVEL_TILE, WALL_HEIGHT, WALL_WIDTH, levelAtPoint, levelTilePosition } from '../src/ui/levelsWall';
 
 describe('levelTilePosition', () => {
-  it('places level ids in row-major order across the wall', () => {
-    expect(levelTilePosition(0)).toEqual({ x: 0, y: 0 });
-    expect(levelTilePosition(1)).toEqual({ x: LEVEL_TILE, y: 0 });
-    expect(levelTilePosition(LEVELS_X)).toEqual({ x: 0, y: LEVEL_TILE });
+  it('places level 0 at the wall\'s centre tile', () => {
+    // 4 wide, 5 tall: centre is row 2, col 2.
+    expect(levelTilePosition(0)).toEqual({ x: 2 * LEVEL_TILE, y: 2 * LEVEL_TILE });
+  });
+
+  it('places low level ids in the ring immediately around the centre', () => {
+    const centreCol = Math.floor(LEVELS_X / 2);
+    const centreRow = Math.floor(LEVELS_Y / 2);
+    for (let levelId = 1; levelId <= 8; levelId += 1) {
+      const { x, y } = levelTilePosition(levelId);
+      const col = x / LEVEL_TILE;
+      const row = y / LEVEL_TILE;
+      const distance = Math.max(Math.abs(row - centreRow), Math.abs(col - centreCol));
+      expect(distance).toBe(1);
+    }
   });
 });
 

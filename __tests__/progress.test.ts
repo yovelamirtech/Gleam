@@ -1,4 +1,5 @@
-import { BOARDS_X, BOARDS_PER_LEVEL, LEVEL_COUNT, LEVELS_X } from '../src/constants/board';
+import { BOARDS_X, BOARDS_PER_LEVEL, LEVEL_COUNT } from '../src/constants/board';
+import { levelIdAt, levelPosition } from '../src/game/levelLayout';
 import {
   boardStatus,
   centreBoardId,
@@ -19,8 +20,9 @@ describe('centreBoardId', () => {
 
 describe('centreLevelId / initialProgress', () => {
   it('starts only the levels wall\'s centre tile unlocked', () => {
-    // 4 wide, 5 tall: centre is row 2, col 2 (id 10).
-    expect(centreLevelId()).toBe(2 * LEVELS_X + 2);
+    // Level ids are handed out closest-to-centre first, so the centre is
+    // always level 0 - "Level 1" is what a fresh install opens on.
+    expect(centreLevelId()).toBe(0);
 
     const progress = initialProgress();
     for (let levelId = 0; levelId < LEVEL_COUNT; levelId += 1) {
@@ -70,8 +72,11 @@ describe('markBoardCompleted', () => {
     }
 
     expect(progress.levels[0].status).toBe('completed');
-    expect(progress.levels[1]?.status).toBe('unlocked'); // right neighbour
-    expect(progress.levels[LEVELS_X]?.status).toBe('unlocked'); // below neighbour
+    const { row, col } = levelPosition(0);
+    const rightNeighbour = levelIdAt(row, col + 1);
+    const belowNeighbour = levelIdAt(row + 1, col);
+    expect(progress.levels[rightNeighbour as number]?.status).toBe('unlocked');
+    expect(progress.levels[belowNeighbour as number]?.status).toBe('unlocked');
   });
 
   it('leaves the level unlocked, not completed, while any board is unfinished', () => {

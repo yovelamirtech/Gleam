@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { BOARDS_PER_LEVEL, BOARDS_X, BOARDS_Y, LEVELS_X, LEVELS_Y, LEVEL_COUNT } from '../constants/board';
+import { BOARDS_PER_LEVEL, BOARDS_X, BOARDS_Y, LEVEL_COUNT } from '../constants/board';
+import { levelIdAt, levelPosition } from '../game/levelLayout';
 
 const STORAGE_KEY = 'gleam:progress:v1';
 
@@ -65,11 +66,13 @@ export function centreBoardId(): number {
   return row * BOARDS_X + col;
 }
 
-/** The levels wall's actual centre tile, same row/col math as `centreBoardId`. */
+/**
+ * The levels wall's centre tile. Level ids are handed out closest-to-centre
+ * first (`levelLayout.ts`), so this is always id 0 - "Level 1" is the one
+ * every fresh install starts on, and it's the wall's middle tile.
+ */
 export function centreLevelId(): number {
-  const col = Math.floor(LEVELS_X / 2);
-  const row = Math.floor(LEVELS_Y / 2);
-  return row * LEVELS_X + col;
+  return 0;
 }
 
 export async function loadProgress(): Promise<Progress> {
@@ -102,14 +105,14 @@ function boardNeighbors(boardId: number): number[] {
 }
 
 function levelNeighbors(levelId: number): number[] {
-  const col = levelId % LEVELS_X;
-  const row = Math.floor(levelId / LEVELS_X);
-  const neighbors: number[] = [];
-  if (row > 0) neighbors.push(levelId - LEVELS_X);
-  if (row < LEVELS_Y - 1) neighbors.push(levelId + LEVELS_X);
-  if (col > 0) neighbors.push(levelId - 1);
-  if (col < LEVELS_X - 1) neighbors.push(levelId + 1);
-  return neighbors;
+  const { row, col } = levelPosition(levelId);
+  const candidates = [
+    levelIdAt(row - 1, col),
+    levelIdAt(row + 1, col),
+    levelIdAt(row, col - 1),
+    levelIdAt(row, col + 1),
+  ];
+  return candidates.filter((id): id is number => id !== null);
 }
 
 /**
