@@ -5,7 +5,7 @@ import {
   clampViewport,
   fitScale,
   fitViewport,
-  viewportTransform,
+  viewportStyle,
   zoomAround,
 } from '../src/ui/viewport';
 
@@ -109,58 +109,19 @@ describe('canvasToCell', () => {
   });
 });
 
-/**
- * RN's `{scale}` transform anchors at the element's own centre, applying
- * each listed transform op in order (translate then scale, or scale then
- * translate) as a sequential transform of the *already-transformed*
- * element, not a single combined origin-anchored matrix. This mirrors that
- * for a `transform` array of exactly the shape `viewportTransform` returns
- * (`[{scale}, {translateX}, {translateY}]`), so a test can check what an
- * `Animated.View` actually renders without a real device.
- */
-function applyRNTransform(
-  transform: ReturnType<typeof viewportTransform>,
-  point: { x: number; y: number },
-  contentWidth: number,
-  contentHeight: number
-): { x: number; y: number } {
-  const centre = { x: contentWidth / 2, y: contentHeight / 2 };
-  let p = point;
-  for (const op of transform) {
-    if ('scale' in op) {
-      p = { x: centre.x + op.scale * (p.x - centre.x), y: centre.y + op.scale * (p.y - centre.y) };
-    } else if ('translateX' in op) {
-      p = { x: p.x + op.translateX, y: p.y };
-    } else {
-      p = { x: p.x, y: p.y + op.translateY };
-    }
-  }
-  return p;
-}
-
-describe('viewportTransform', () => {
-  it('renders the wall\'s own top-left corner exactly where translateX/translateY say it should be', () => {
-    // The board wall's real numbers from an on-device debug readout: a huge
-    // content size (7680x5760) at a tiny scale is exactly where RN's default
-    // centre-anchored scale error is largest (thousands of px), so this is
-    // the case that actually caught the bug.
-    const contentWidth = 7680;
-    const contentHeight = 5760;
-    const viewport = { translateX: 0, translateY: 269.3, scale: 0.0523 };
-    const transform = viewportTransform(viewport, contentWidth, contentHeight);
-    const rendered = applyRNTransform(transform, { x: 0, y: 0 }, contentWidth, contentHeight);
-    expect(rendered.x).toBeCloseTo(viewport.translateX, 1);
-    expect(rendered.y).toBeCloseTo(viewport.translateY, 1);
-  });
-
-  it('scales every other point the same way the viewport maths intends', () => {
-    const contentWidth = 800;
-    const contentHeight = 1000;
+describe('viewportStyle', () => {
+  it('anchors the scale at the origin via transformOrigin, not a manual translate correction', () => {
+    // transformOrigin must be three plain numbers - RN's docs say a
+    // '0 0'-style CSS string needs explicit %/px units to parse at all, and
+    // silently falls back to the 50%/50% default otherwise (which is what
+    // broke this the first time around).
     const viewport = { translateX: -37, translateY: 19, scale: 1.7 };
-    const transform = viewportTransform(viewport, contentWidth, contentHeight);
-    const point = { x: 123, y: 456 };
-    const rendered = applyRNTransform(transform, point, contentWidth, contentHeight);
-    expect(rendered.x).toBeCloseTo(viewport.translateX + viewport.scale * point.x);
-    expect(rendered.y).toBeCloseTo(viewport.translateY + viewport.scale * point.y);
+    const style = viewportStyle(viewport);
+    expect(style.transformOrigin).toEqual([0, 0, 0]);
+    expect(style.transform).toEqual([
+      { translateX: viewport.translateX },
+      { translateY: viewport.translateY },
+      { scale: viewport.scale },
+    ]);
   });
 });
