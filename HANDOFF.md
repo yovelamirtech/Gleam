@@ -308,38 +308,91 @@ point forward.
 
 ## On-device checklist
 
-The user's first real on-device test (iPhone, Expo Go) surfaced three real
-crashes, all fixed on this branch (see this PR's own description for full
-detail on each):
+The user did the project's first real on-device test this round (Expo Go)
+and hit a real bug immediately: the app launched fine and the levels wall
+showed right after Tap to Start, then the whole app crashed on the very
+first touch. Root cause: `react-native-worklets` (the engine
+`react-native-reanimated` 4 uses) needs Metro's `inlineRequires` transform
+enabled to initialise, and this project had no `metro.config.js` at all, so
+Expo's own default (`inlineRequires` off) silently applied - the crash only
+surfaces the moment a worklet actually runs, i.e. the first pan/pinch/tap,
+which is why nothing looked wrong before that. Fixed by a new
+`metro.config.js` (`transformer.getTransformOptions` -> `inlineRequires:
+true`), shipped as its own PR against `main`
+(`claude/fix-expo-go-worklets-crash`, independent of the unified-wall PR
+since it's infrastructure, not feature work, and affects every
+gesture-driven screen that already existed) as well as on the unified-wall
+branch itself. **Not yet confirmed fixed on a real device** - the user found
+the bug live but hadn't re-tested with the fix as of this note; do that
+before assuming it's actually resolved, since this project cannot reproduce
+or verify the crash from this environment at all (nothing here can run
+Expo Go). If it turns out *not* to fix it, the versions themselves were
+double-checked and are not the problem (`react-native-worklets@0.10.1` /
+`react-native-reanimated@4.5.1` are exactly what Expo SDK 57 bundles) - look
+next at whether New Architecture is actually enabled, and at
+`babel.config.js`'s `react-native-worklets/plugin` ordering.
 
-1. **Crash on first touch** — no `metro.config.js` existed, so Expo's
-   default (`inlineRequires` off) left `react-native-worklets` unable to
-   initialise. Fixed with a new `metro.config.js`.
-2. **Crash on IAP init** (`Cannot find native module 'ExpoIap'`) —
-   `expo-iap`'s `useIAP()` resolves its native module before its own
-   `initConnection` try/catch, throwing an unhandled promise rejection when
-   it's missing. `src/hooks/usePurchases.tsx`'s `PurchasesProvider` now
-   checks availability itself before ever calling `useIAP`.
-3. **The real remaining crash, confirmed from the device's own `.ips` crash
-   log** (Settings -> Privacy & Security -> Analytics & Improvements ->
-   Analytics Data on the phone itself - Metro's own terminal showed nothing
-   at all for this one): `LevelsScreen`'s tap gesture called
-   `levelAtPoint()` (`src/ui/levelsWall.ts`) directly from its `onEnd`
-   worklet, but that function was never marked `'worklet'` - unlike every
-   other cross-thread helper in this codebase (`src/ui/viewport.ts`). Under
-   Reanimated 4 that's a genuine native crash (`abort()` via an uncaught JS
-   exception inside `runSyncOnRuntime`), not an Expo Go quirk, and it's been
-   in already-merged `main` code since the earlier unified-levels-wall PR
-   (#10) - it just never got exercised on a real device before now. Fixed
-   by adding the `'worklet'` directive.
+**A second, unrelated crash surfaced right after that first fix**:
+`Uncaught (in promise, id: 0): "Error: Cannot find native module 'ExpoIap'"`.
+`expo-iap` doesn't throw at *import* time when its native module is missing
+(unlike `react-native-google-mobile-ads`, see "Ads/IAP and plain Expo Go"
+below) - it resolves the module lazily through a Proxy. But `useIAP()`
+itself registers its purchase-update/error listeners *before* its own
+`initConnection` try/catch (read directly out of `expo-iap`'s own source,
+`node_modules/expo-iap/build/useIAP.js`), and those listener functions
+resolve the native module eagerly and throw synchronously when it's missing
+- inside an `async` function nobody awaits, so it surfaces as an unhandled
+promise rejection instead of the graceful "not connected" state the rest of
+`useIAP` degrades to. Fixed the same way the ads module already handles
+this class of bug: `src/hooks/usePurchases.tsx`'s `PurchasesProvider` now
+checks `requireNativeModule('ExpoIap')` itself (the same call `expo-iap`
+makes internally) *before* ever calling `useIAP`, splitting into
+`LiveIapPurchasesProvider` (today's behaviour, unchanged) and
+`DisabledPurchasesProvider` (cache-only, harmless no-op buy/restore).
+`__tests__/iapUnavailable.test.tsx` proves the fallback. Also folded into
+both the unified-wall branch and the `claude/fix-expo-go-worklets-crash` PR.
 
-**Still not confirmed fixed end to end on a real device** as of this note -
-this was the third attempt at this crash, and the `.ips` file's precision
-makes fix #3 a much stronger candidate than the first two, but only a real
-device can confirm the app is actually stable now.
+**A third crash remained after both of those fixes, and this one turned out
+to be the real, root cause** - confirmed from the device's own crash log
+(an `.ips` file the user pulled from Settings -> Privacy & Security ->
+Analytics & Improvements -> Analytics Data and shared directly, after
+Metro's own terminal showed nothing at all - only Skia deprecation
+warnings, no error). The `.ips` file's faulting thread was unambiguous:
 
-Nothing else in this project has been run on a real device or simulator this
-whole build (remote container, nothing attached) — every item below is
+```
+UIGestureRecognizer -> reanimated::handleEvent -> runSyncOnRuntime
+  -> Hermes call() -> throwPendingError() -> uncaught -> abort()
+```
+
+A JS exception was being thrown *inside a worklet running on the UI
+thread*, with nothing to catch it - a genuine crash, not an Expo Go/
+environment quirk, and not something either of the first two fixes could
+have touched. `LevelsScreen`'s tap gesture calls `levelAtPoint()` directly
+from its `onEnd` worklet, but `levelAtPoint` (`src/ui/levelsWall.ts`) was
+never marked `'worklet'` - unlike every other cross-thread helper in this
+codebase (`src/ui/viewport.ts`'s functions all explicitly start with
+`'worklet';`, exactly for this reason, per that file's own doc comment).
+Under Reanimated 4, calling a plain (non-worklet) function from a
+UI-thread worklet doesn't degrade gracefully - it crashes the whole app
+natively, with nothing catchable on the JS side, which is exactly why nothing
+showed up in Metro or as a red screen. This bug has been in already-merged
+`main` code since the earlier unified-levels-wall PR (#10) - it predates
+this session entirely, just never got exercised on a real device until now.
+Fixed by adding the `'worklet'` directive to `levelAtPoint`. Checked every
+other gesture worklet in the codebase (`BoardScreen.tsx`,
+`UnifiedBoardScreen.tsx`, `LevelsScreen.tsx`'s own pan/pinch) for the same
+pattern - all fine, either calling already-worklet-marked helpers
+(`clampViewport`/`zoomAround`) or routing through `runOnJS` correctly.
+Folded into both the unified-wall branch and
+`claude/fix-expo-go-worklets-crash`. **Still not confirmed fixed on a real
+device** as of this note - this is the third attempt, and only a real
+device can confirm whether the app is now actually stable end to end (the
+`.ips` file's precision this time makes it a much stronger fix than the
+first two, but "the crash log points here" isn't the same as "verified
+gone").
+
+Nothing else in this project has been run on a real device or simulator
+this whole build (remote container, nothing attached) — every item below is
 still open, gathered here in one place per the user's request, to go
 through together once a device is available rather than repeating
 "not checked on a real device" scattered through this file:
@@ -412,6 +465,104 @@ through together once a device is available rather than repeating
   until then); does "Restore purchases" in `SettingsScreen` actually find a
   prior purchase after a reinstall.
 
+## Done, continued
+
+15. **Fixed the quadratic stones-picture rebuild in `BoardCanvas`** — the
+    first of item 8's two split-off pieces (see "Next up" item 8's
+    performance note below; the user picked "fix rebuild first, separate
+    PR" when asked). Confirmed with the user before designing the fix.
+    `stonesPicture`'s `useMemo` used to replay every past placement's
+    `drawStone` calls from scratch on every single new placement -
+    O(n) work at the n-th placement, O(n^2) total across a full board fill.
+    New `src/ui/stoneBaking.ts` (`bakeBoundary`, tested directly in
+    `__tests__/stoneBaking.test.ts`) is the pure batch-boundary math: a
+    "baked" picture is kept per session in a ref, advanced one batch of
+    `BAKE_BATCH_SIZE` (16) placements at a time by drawing the *previous*
+    baked picture with a single `canvas.drawPicture()` call (not a replay of
+    every stone already in it) plus that batch's own new stones; only the
+    placements since the last batch boundary are replayed with `drawStone`
+    on every placement, bounded to at most `BAKE_BATCH_SIZE - 1` stones.
+    Total draw-call work across a full fill is now O(n * BAKE_BATCH_SIZE),
+    not O(n^2). The baked cache resets whenever the `BoardSession` identity
+    changes (a different board), detected inside the memo itself rather than
+    a separate `useEffect`, to avoid a stale-cache render on the first frame
+    of a new board. `BoardSession.history` only ever grows (no undo), so no
+    shrink case to handle. **Not profiled on a real device** (see "On-device
+    checklist") - this is the same "code-reading only" caveat as the rest of
+    the performance note below; it should make a real difference given the
+    O(n^2) -> O(n * batch) shape of the fix, but hasn't been measured. Also
+    not yet started: the wall's 48x cell-count multiplier and the
+    viewport-culling question the performance note raises below - this was
+    deliberately scoped to the single-board rebuild cost alone, as its own
+    separately-shippable step, per the plan the user confirmed.
+
+16. **The unified wall, board-level half — an MVP, scoped down from the
+    fullest reading of the ask.** `BoardsScreen`/`BoardRoute` are gone;
+    `UnifiedBoardScreen` (`src/screens/UnifiedBoardScreen.tsx`) is the new
+    'Boards' route target and does both their jobs. Pan/zoom over one
+    continuous canvas of the whole level's 48 boards (mosaic tiles built
+    from the same preview-artwork crop `BoardsScreen` used, now positioned
+    by `src/ui/unifiedBoard.ts`'s wall-space geometry - tested directly in
+    `__tests__/unifiedBoard.test.ts` - instead of a `flexWrap` grid); zoom in
+    on a spot past `PLAYABLE_SCALE` (0.5, roughly 12px/cell) and the board
+    at screen centre becomes live and playable, tracked continuously as you
+    pan (`centreBoardAt`), not just on a tap. Locked boards dim with a lock
+    overlay in place, same as before, just positioned on the wall instead of
+    in a grid cell. `CELL` (the board-space pixel unit `BoardCanvas` already
+    drew in) moved from `BoardCanvas.tsx` to `src/constants/board.ts` so the
+    plain (non-Skia) wall-geometry module could share it without pulling
+    `@shopify/react-native-skia` into code Jest needs to parse without a
+    native runtime. `__tests__/UnifiedBoardScreen.test.tsx` covers the wall
+    rendering every tile, a boardId route param (the dev-tools "jump to a
+    board" shortcut, now `navigation.navigate('Boards', {levelId, boardId})`
+    instead of a separate 'Board' route - `DevToolsScreen.tsx` updated to
+    match) dropping straight into play, a locked target board *not* dropping
+    into play, and exiting a board zooming back out to the wall rather than
+    leaving the level.
+
+    **The scope-down, and why**: the fullest reading of the user's ask (see
+    item 8's quote below) is every nearby board's real stones rendered
+    live, simultaneously, in one shared canvas, with only a thin line - not
+    a mode switch - between the one you're panning across and the one
+    you're actively placing stones on. Building that means teaching
+    `BoardCanvas`'s placement math (built entirely in one board's own local
+    cell coordinates) to place stones in *wall* coordinates across
+    potentially several concurrently-mounted boards' sessions, and picking
+    a design for what non-active-but-visible boards render at high zoom
+    (their own live `BoardCanvas`? A frozen last-known picture?) - real,
+    not-yet-designed work on top of everything already built. Given the
+    round's scope, this instead **reuses `BoardScreen` wholesale** (its own
+    pan/zoom-within-a-board, tray, HUD, onboarding, dev tools, sounds - all
+    already tested, `__tests__/BoardScreen.test.tsx` untouched and still
+    green) as a full-screen overlay the moment the wall's own zoom crosses
+    the playable threshold, instead of rendering that board's stones inside
+    the wall canvas itself. So: **not delivered** - a single canvas with
+    every visible board's real stones drawn together in one frame; neighbour
+    boards actually visible (not just mosaic art) while playing; a *seamless*
+    hand-off animation into play (there's a hard cut between the wall's own
+    pan position and `BoardScreen`'s own `fitViewport`-driven starting
+    zoom/pan, since it's a genuinely separate mounted component with its own
+    view state, not a continuation of the wall's transform). **Delivered**:
+    one continuous pan/zoom canvas replacing the tap-to-navigate grid+screen
+    split (so browsing the whole level is now exactly the same interaction
+    model `LevelsScreen` already uses one layer up); the 48x cell-count
+    multiplier is a non-issue by construction (never more than one live
+    `BoardCanvas`/`BoardSession` mounted at a time, same cost as before this
+    round); entering/leaving play is continuous zoom rather than a
+    `Stack.Navigator` push (no slide transition, returns to the exact pan/
+    zoom the wall was left at). **Not verified on a real device** (see
+    "On-device checklist") - the playable-scale threshold in particular is a
+    guess (`PLAYABLE_SCALE = 0.5` in `src/ui/unifiedBoard.ts`) and may want
+    tuning once someone can actually pinch-zoom on a screen.
+
+    If the fuller, everything-live-at-once version is wanted later: this
+    round's `bakeBoundary`/incremental-picture work (item 15 above) and the
+    wall-space geometry in `src/ui/unifiedBoard.ts` (`boardTilePosition`,
+    `boardAtPoint`, viewport-culling groundwork) are both reusable pieces of
+    it either way - the remaining work is specifically the placement-math
+    and multi-board-rendering redesign described above, not a rewrite of
+    what this round added.
+
 ## Next up
 
 **Start with item 8 below** (the board-level half of the unified wall) —
@@ -448,9 +599,22 @@ images, so it isn't blocking anything.
    (`src/constants/board.ts`), only 7 levels are prepared. The user
    provides source images; run `tools/prep-images` on them the same way
    PR #6 did.
-8. **START HERE — the unified wall, board-level half.** The levels wall
+8. **The unified wall, board-level half - an MVP is done, see "Done,
+   continued" items 15-16 above; the fuller version is still open.** Its own
+   rebuild-cost performance fix (item 15) and a first working version of the
+   wall itself (item 16 - one continuous pan/zoom canvas over the whole
+   level's mosaic artwork, zooming in on a spot past a threshold drops you
+   into playing that exact board) are both done and merged on this branch.
+   Item 16's own writeup is explicit about the scope-down from the fullest
+   reading of the ask below: what's still open is every nearby board's real
+   stones rendered live and simultaneously in one shared canvas (this
+   round reuses `BoardScreen` wholesale as a full-screen overlay instead),
+   which needs `BoardCanvas`'s placement math taught to work in wall
+   coordinates across potentially several boards at once - real,
+   not-yet-designed work, described in item 16's "if the fuller version is
+   wanted later" note. The levels wall
    (see "Done" item 14 above) is the same idea at the *levels* layer and
-   is finished; this item is the harder half, still not started: the
+   is finished; this item is the harder half: the
    user's board-level ask, verbatim (Hebrew) —
 
    > "דמיינתי יותר את כל הבורדים מחוברים יחד ורק מופרדים עם קו. אפשר

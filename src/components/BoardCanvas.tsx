@@ -1,16 +1,25 @@
-import { Canvas, Group, Picture, Skia, createPicture } from '@shopify/react-native-skia';
-import React, { useMemo } from 'react';
+import {
+  Canvas,
+  Group,
+  Picture,
+  Skia,
+  createPicture,
+  type SkCanvas,
+  type SkPicture,
+} from '@shopify/react-native-skia';
+import React, { useMemo, useRef } from 'react';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 
+import { CELL } from '../constants/board';
 import { cellCol, cellRow, stripCells } from '../game/geometry';
 import type { BoardSession } from '../game/session';
-import type { Orientation } from '../game/types';
+import type { Orientation, Placement } from '../game/types';
 import { drawStone, strokePaint } from '../ui/drawStone';
 import { numberFont } from '../ui/font';
+import { bakeBoundary } from '../ui/stoneBaking';
 import { theme } from '../ui/theme';
 
-/** One cell in board space. Screen size comes from the viewport transform. */
-export const CELL = 24;
+export { CELL };
 
 export interface DropPreview {
   row: number;
@@ -41,8 +50,9 @@ interface Props {
  *
  * Three layers, each baked into a Skia picture rather than thousands of React
  * elements: the empty cells with their numbers (rebuilt only when the board
- * changes), the placed stones (rebuilt on every placement), and the drop
- * preview under the dragged strip.
+ * changes), the placed stones (rebuilt incrementally as stones are placed -
+ * see the `bakedRef`/`bakeBoundary` comment below), and the drop preview
+ * under the dragged strip.
  */
 export function BoardCanvas({
   session,
@@ -90,21 +100,54 @@ export function BoardCanvas({
     [board]
   );
 
+  // A board fully rebuilding its stones picture on every single placement
+  // costs O(n) work at the n-th placement, so filling a board this way costs
+  // O(n^2) draw-call work in total (see src/ui/stoneBaking.ts). Instead a
+  // "baked" picture is kept per session, advanced one batch at a time by
+  // drawing the *previous* baked picture (one drawPicture call, not a replay
+  // of every stone in it) plus that batch's own stones; only the placements
+  // since the last batch boundary are replayed with drawStone on every
+  // placement, bounded to at most BAKE_BATCH_SIZE - 1 of them.
+  const bakedRef = useRef<{ session: BoardSession | null; count: number; picture: SkPicture | null }>({
+    session: null,
+    count: 0,
+    picture: null,
+  });
+
   // Keyed on the stone count, not the session revision: sizing a strip in the
   // tray bumps the revision many times a second, and redrawing every stone on
   // the board for that is work nobody asked for.
-  const stonesPicture = useMemo(
-    () =>
-      createPicture((canvas) => {
-        for (const placement of session.placements) {
-          const row = cellRow(placement.cell, board.width);
-          const col = cellCol(placement.cell, board.width);
-          drawStone(canvas, col * CELL, row * CELL, CELL, board.palette[placement.color].hex);
-        }
-      }, Skia.XYWHRect(0, 0, board.width * CELL, board.height * CELL)),
+  const stonesPicture = useMemo(() => {
+    if (bakedRef.current.session !== session) {
+      bakedRef.current = { session, count: 0, picture: null };
+    }
+    const baked = bakedRef.current;
+
+    const drawPlacement = (canvas: SkCanvas, placement: Placement) => {
+      const row = cellRow(placement.cell, board.width);
+      const col = cellCol(placement.cell, board.width);
+      drawStone(canvas, col * CELL, row * CELL, CELL, board.palette[placement.color].hex);
+    };
+
+    const placements = session.placements;
+    const boundary = bakeBoundary(placements.length);
+    if (boundary > baked.count) {
+      const previousPicture = baked.picture;
+      const batch = placements.slice(baked.count, boundary);
+      const nextPicture = createPicture((canvas) => {
+        if (previousPicture) canvas.drawPicture(previousPicture);
+        for (const placement of batch) drawPlacement(canvas, placement);
+      }, Skia.XYWHRect(0, 0, board.width * CELL, board.height * CELL));
+      bakedRef.current = { session, count: boundary, picture: nextPicture };
+    }
+
+    const tail = placements.slice(bakedRef.current.count, placements.length);
+    return createPicture((canvas) => {
+      if (bakedRef.current.picture) canvas.drawPicture(bakedRef.current.picture);
+      for (const placement of tail) drawPlacement(canvas, placement);
+    }, Skia.XYWHRect(0, 0, board.width * CELL, board.height * CELL));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [session, board, session.stonesPlaced]
-  );
+  }, [session, board, session.stonesPlaced]);
 
   // Dev tool only: a corner swatch of each still-empty cell's true colour, so
   // a source image can be checked against the level it produced without
