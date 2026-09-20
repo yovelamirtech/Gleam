@@ -126,7 +126,13 @@ export default function LevelsScreen({ navigation }: Props) {
         if (levelId !== null) runOnJS(handleTap)(levelId);
       });
 
-    return Gesture.Simultaneous(Gesture.Exclusive(tap, pan), pinch);
+    // Race, not Exclusive: Exclusive makes pan `requireToFail` the tap, so a
+    // drag can't start moving the wall until the tap gesture times out on its
+    // own (~500ms) - the wall reads as stuck unless you hold still first. A
+    // race lets both gestures watch the touch from the first frame, so pan
+    // takes over the instant the finger moves past the tap's own move
+    // threshold, with no wait.
+    return Gesture.Simultaneous(Gesture.Race(pan, tap), pinch);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bounds.canvasWidth, bounds.canvasHeight, handleTap, scale, translateX, translateY]);
 
