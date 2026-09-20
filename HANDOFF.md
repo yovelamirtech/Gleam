@@ -205,10 +205,41 @@ technical writeup of each:
     `__tests__/settingsScreen.test.tsx` (new),
     `__tests__/devToolsScreen.test.tsx` (new), `__tests__/openingScreens.test.tsx`.
 
-All of the above is on branch `claude/affectionate-cannon-z4do8h`. PR #8
-(items 1-6) is merged into `main`; PR #9 (items 7-13) is open. `npm run
+14. **The unified wall, levels-wall half only** — see "Next up" item 8's
+    history below for the full ask; this round did the levels wall
+    (`LevelsScreen`), not the board-level canvas, per the user's own
+    priority call (levels wall first: lower-risk, no gameplay or Skia
+    involved; investigate why the board is already slow before touching
+    it - see the performance note in "Next up" item 8 below, now split
+    into its own remaining item). `LevelsScreen` is now one continuous
+    pannable/zoomable canvas of every level's full preview artwork
+    (`src/ui/levelsWall.ts` for the pure grid-position/hit-test math,
+    tested in `__tests__/levelsWall.test.ts`), replacing the old
+    `ScrollView` grid of small tiles. Only the wall's *centre* level
+    starts unlocked, matching the user's own wording ("רק אחת פתוחה
+    במרכז") - previously it was level 0 (top-left). New
+    `centreLevelId()` in `src/storage/progress.ts`, mirroring the
+    existing `centreBoardId()`; `initialProgress()` now unlocks that
+    instead of index 0 (`__tests__/progress.test.ts` covers it). Tapping
+    an unlocked tile still navigates to the existing `BoardsScreen` -
+    that screen, and the board-level unified canvas the user actually
+    asked for first, are unchanged, see below. No Skia involved here at
+    all: it's ~20 `ImageBackground`s inside one `Animated.View`
+    transformed by the same pan/pinch viewport math `BoardScreen` already
+    uses (`src/ui/viewport.ts`, unchanged - it was already generic over
+    "canvas bounds", not hardcoded to one board's size). Locked levels
+    render dimmed in place with a lock icon, same visual language as
+    before, just positioned absolutely in the wall instead of being a
+    separate grid tile. Covered by `__tests__/LevelsScreen.test.tsx`
+    (new): every level renders as a tile, only the centre one starts
+    unlocked, tapping an unlocked tile navigates, tapping a locked one
+    does nothing. **Not seen on a real screen or device**, same caveat as
+    everything else in this project.
+
+All of the above is on branch `claude/continue-planned-work-vk64kd`. PR #8
+(items 1-6) and PR #9 (items 7-13) are both merged into `main`. `npm run
 typecheck` and `npm test` are both clean as of this file's last edit
-(218 tests).
+(228 tests).
 
 ## Ads/IAP and plain Expo Go
 
@@ -353,12 +384,12 @@ through together once a device is available rather than repeating
 
 ## Next up
 
-**Start with item 8 below** (the unified wall) — that is what the user
-asked for next, explicitly, in the same message this whole list comes
-from. The rest of this list is numbered by BUILD_PLAN.md order, not
-priority; items 1-6 are already done (kept here as pointers into "Done"
-above) and item 7 depends on the user supplying images, so it isn't
-blocking anything.
+**Start with item 8 below** (the board-level half of the unified wall) —
+the levels-wall half is now done (see "Done" item 14 above); this is what's
+left of what the user asked for. The rest of this list is numbered by
+BUILD_PLAN.md order, not priority; items 1-6 are already done (kept here as
+pointers into "Done" above) and item 7 depends on the user supplying
+images, so it isn't blocking anything.
 
 1. ~~**Opening screens**~~ done — see "Done" item 8 above. Nothing else in
    מסכי פתיחה וניווט is outstanding (Levels/Board/Settings all exist). The
@@ -387,20 +418,10 @@ blocking anything.
    (`src/constants/board.ts`), only 7 levels are prepared. The user
    provides source images; run `tools/prep-images` on them the same way
    PR #6 did.
-8. **START HERE — the unified wall.** The user's own next instruction,
-   verbatim (Hebrew, from the session that wrote this note), was: "תתעד
-   הכל ואני רוצה שהסוכן הבא יתחיל בקיר המאוחד" — "document everything,
-   and I want the next agent to start on the unified wall." This whole
-   item is that documentation. No code for it exists yet; this is a
-   planning-plus-implementation task, not a quick fix. **Do not skip
-   straight to coding** — this changes navigation, rendering, and touches
-   the performance complaint below too; get the approach confirmed
-   (`AskUserQuestion` or similar) before writing code, the way this
-   session did for the ads/IAP infrastructure change.
-
-   **What the user actually asked for**, their own words translated
-   closely (originally about the board screen, but they confirmed - see
-   below - the same idea applies to the levels wall too):
+8. **START HERE — the unified wall, board-level half.** The levels wall
+   (see "Done" item 14 above) is the same idea at the *levels* layer and
+   is finished; this item is the harder half, still not started: the
+   user's board-level ask, verbatim (Hebrew) —
 
    > "דמיינתי יותר את כל הבורדים מחוברים יחד ורק מופרדים עם קו. אפשר
    > לעשות זום אין ואאוט חופשי על הציור הכולל, כדי לראות את הבורד שלי,
@@ -410,52 +431,75 @@ blocking anything.
    > board, and you can always play on it. When you're in the game
    > you're playing on the whole picture together."
 
-   > "זה צריך להיות קיר אחד ענק עם כל התמונות. רק אחת פתוחה במרכז, והשאר
-   > מסביב חסומות. אפשר לעשות זום אין ואאוט חופשי להסתכל מקום מאוד על
-   > היצירות שלך ולזוז חופשי בין היצירות."
-   > — (about the *levels* wall) "This should be one giant wall with
-   > every picture. Only one open in the centre, the rest locked around
-   > it. Free zoom in/out to look closely at your works and move freely
-   > between them."
+   Today `BoardsScreen` (a tappable 8x6 grid of tiles) is a separate
+   screen from `BoardRoute`/`BoardScreen` (one 40x40 board at a time,
+   entered by tapping a tile). The ask is to collapse these into one
+   screen - the whole 320x240-cell level as a single pannable/zoomable
+   canvas, thin lines between boards instead of a hard screen transition,
+   and gameplay (tray, HUD, placing stones) working against whatever
+   board the viewport is currently centred on/over. A board earns its
+   "unlocked" status exactly as it does today (finishing a neighbour), it
+   just doesn't get its own screen any more - locked boards would need
+   some kind of dimmed/greyed treatment *within* the single canvas
+   instead of not being reachable. **Do not skip straight to coding** —
+   this changes navigation and rendering, and the performance question
+   below is the real risk; get the approach confirmed (`AskUserQuestion`
+   or similar) before writing code, the way the levels-wall round did
+   (the user picked "levels wall first" and "investigate before
+   planning" when asked).
 
-   So **two separate screens, same idea applied twice**:
-   - Inside a level: today `BoardsScreen` (a tappable 8x6 grid of tiles)
-     is a separate screen from `BoardRoute`/`BoardScreen` (one 40x40
-     board at a time, entered by tapping a tile). The ask is to collapse
-     these into one screen - the whole 320x240-cell level as a single
-     pannable/zoomable canvas, thin lines between boards instead of a
-     hard screen transition, and gameplay (tray, HUD, placing stones)
-     working against whatever board the viewport is currently centred
-     on/over. A board earns its "unlocked" status exactly as it does
-     today (finishing a neighbour), it just doesn't get its own screen
-     any more - locked boards would need some kind of dimmed/greyed
-     treatment *within* the single canvas instead of not being
-     reachable.
-   - The levels wall: today `LevelsScreen` is a `ScrollView` grid of
-     tiles, one per level, each a small preview image. The ask is a
-     single giant zoomable/pannable canvas of *every* level's full
-     preview artwork (not just a small tile), only the centre level
-     unlocked at the start, same free zoom/pan to browse.
-
-   **In the same message, the user also asked**: "צריך להבין איך משפרים
+   **The user, in the same message, also asked**: "צריך להבין איך משפרים
    ביצועים כי לוח מלא מתחיל להיות כבר קשה להריץ, ואני רוצה להריץ את כל
    התמונה" — "need to figure out how to improve performance, because a
    full board is already getting hard to run, and I want to run the
-   whole picture." **These two asks pull in opposite directions** unless
-   handled carefully: today's board screen already struggles rendering
-   one 40x40 board (1600 cells, each a faceted `drawStone` with up to 8
-   Skia draw calls); the wall this item asks for is a 320x240-cell
-   canvas (48x the cells) for one level, and the levels wall is 20 full
-   preview images at once. Rendering everything all the time is very
-   likely a non-starter - some form of only-draw-what's-visible
-   (viewport-culled / tiled rendering) is probably required, not
-   optional polish. No profiling has been done on a real device yet (see
-   "On-device checklist"), so treat "why is the current board already
-   slow" as an open question to investigate first, not an assumption -
-   it could be the per-stone Skia draw-call count, the picture-rebuild
-   strategy, the gesture/viewport math, or something else entirely, and
-   the fix for the unified wall may or may not be the same fix as for
-   today's single-board slowness.
+   whole picture." **This pulls in the opposite direction** from the
+   canvas ask above unless handled carefully: this canvas is a
+   320x240-cell wall (48x today's single board's cell count) rendered at
+   the same full-fidelity stones.
+
+   **Performance investigation done this round** (still code-reading
+   only - no real device or profiler has run against this project once,
+   see "On-device checklist"; treat this as a hypothesis to confirm on a
+   device, not a settled diagnosis): two separate, stackable costs, read
+   directly out of `src/components/BoardCanvas.tsx` and
+   `src/ui/drawStone.ts`.
+   - **Per-stone draw-call count.** `drawStone()` issues roughly 21 Skia
+     draw calls for one stone: a shadow oval, 8 facet paths each stroked
+     *and* filled (16 calls), a centre "table" circle plus its stroke (2),
+     and a highlight arc. A full 40x40 board is 1600 stones, so a fully
+     solved board's `stonesPicture` is on the order of 33,000 draw calls
+     baked into one `Picture`.
+   - **The stones picture is rebuilt from scratch on every single
+     placement, not incrementally.** `BoardCanvas`'s `stonesPicture`
+     `useMemo` depends on `session.stonesPlaced`
+     (`src/components/BoardCanvas.tsx:96-107`) and its body loops over
+     *every* placement in `session.placements`, replaying `drawStone` for
+     all of them, each time one more stone is placed. Filling a board of
+     N cells this way does the *n*-th placement's `drawStone` work n
+     times over the course of filling the board (once fresh, then
+     replayed on every subsequent placement's rebuild) - roughly
+     quadratic total draw-call work across a full board fill, not linear
+     in the number of stones placed. This is a very plausible root cause
+     for "a full board is already getting hard to run" on its own,
+     independent of the wall/canvas question entirely - it's worth
+     profiling and very possibly fixing (e.g. bake completed regions into
+     a static picture and only redraw what changed since the last
+     placement, the way a dirty-rect or layered-canvas approach would)
+     *before* assuming the unified wall needs its own separate fix. Doing
+     that as a first, small, separately-shippable step would also make
+     "is the wall viable at all" a fairer question to answer, since right
+     now the single-board baseline it would be compared against already
+     has this problem baked in.
+   - Combined with the wall's 48x cell-count multiplier, full-fidelity
+     stones almost certainly cannot render everywhere at once regardless
+     of the above fix - some form of only-draw-what's-visible
+     (viewport-culled / tiled rendering, only baking `Picture`s for
+     boards within or near the viewport) is very likely required for the
+     canvas itself, on top of whatever the rebuild-cost fix above turns
+     out to be. `LevelCompleteCanvas` (next bullet) is the existing
+     precedent for "flatten instead of full-fidelity at this scale" and
+     is worth understanding before assuming full-fidelity stones are
+     viable at wall scale at all.
 
    **Relevant existing code to read before designing anything:**
    - `src/ui/viewport.ts` — the current pan/zoom math, clamped to one
@@ -479,9 +523,13 @@ blocking anything.
      canvas spanning many boards raises the question of whether that
      stays one session per board (probably yes, for minimal disruption
      to the exact-stone-economy logic) or needs to change.
-   - `src/screens/BoardsScreen.tsx`, `src/screens/LevelsScreen.tsx`,
-     `src/screens/BoardRoute.tsx`, `App.tsx`'s `Stack.Navigator` - the
-     navigation structure this item would restructure or remove.
+   - `src/screens/BoardsScreen.tsx`, `src/screens/BoardRoute.tsx`,
+     `App.tsx`'s `Stack.Navigator` - the navigation structure this item
+     would restructure or remove. `src/screens/LevelsScreen.tsx` (now the
+     unified levels wall, see "Done" item 14) and `src/ui/levelsWall.ts`
+     are the closest existing precedent for this item's own pan/pinch/tap
+     plumbing - reuse the same shape, not the same code (that wall has no
+     Skia or gameplay to worry about; this one does).
    - `src/storage/progress.ts` - board/level lock state
      (`boardStatus`/`centreBoardId`/`markBoardCompleted`), which the
      within-canvas "locked" treatment would read the same way `BoardsScreen`

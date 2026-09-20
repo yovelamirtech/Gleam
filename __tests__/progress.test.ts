@@ -2,6 +2,7 @@ import { BOARDS_X, BOARDS_PER_LEVEL, LEVEL_COUNT, LEVELS_X } from '../src/consta
 import {
   boardStatus,
   centreBoardId,
+  centreLevelId,
   initialProgress,
   markBoardCompleted,
   unlockAll,
@@ -13,6 +14,19 @@ describe('centreBoardId', () => {
     // is 24, which is row 3 col 0, the left edge of the same row.
     expect(centreBoardId()).toBe(3 * BOARDS_X + 4);
     expect(centreBoardId()).not.toBe(Math.floor(BOARDS_PER_LEVEL / 2));
+  });
+});
+
+describe('centreLevelId / initialProgress', () => {
+  it('starts only the levels wall\'s centre tile unlocked', () => {
+    // 4 wide, 5 tall: centre is row 2, col 2 (id 10).
+    expect(centreLevelId()).toBe(2 * LEVELS_X + 2);
+
+    const progress = initialProgress();
+    for (let levelId = 0; levelId < LEVEL_COUNT; levelId += 1) {
+      const expected = levelId === centreLevelId() ? 'unlocked' : 'locked';
+      expect(progress.levels[levelId].status).toBe(expected);
+    }
   });
 });
 
