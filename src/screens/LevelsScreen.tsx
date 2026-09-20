@@ -27,7 +27,7 @@ import {
 import {
   clampViewport,
   fitViewport,
-  viewportTransform,
+  viewportStyle,
   zoomAround,
   type ViewportBounds,
 } from '../ui/viewport';
@@ -142,13 +142,9 @@ export default function LevelsScreen({ navigation }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bounds.canvasWidth, bounds.canvasHeight, handleTap, scale, translateX, translateY]);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: viewportTransform(
-      { translateX: translateX.value, translateY: translateY.value, scale: scale.value },
-      WALL_WIDTH,
-      WALL_HEIGHT
-    ),
-  }));
+  const animatedStyle = useAnimatedStyle(() =>
+    viewportStyle({ translateX: translateX.value, translateY: translateY.value, scale: scale.value })
+  );
 
   return (
     <View style={styles.screen}>

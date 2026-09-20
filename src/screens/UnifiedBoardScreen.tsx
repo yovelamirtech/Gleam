@@ -34,7 +34,7 @@ import {
 import {
   clampViewport,
   fitViewport,
-  viewportTransform,
+  viewportStyle,
   zoomAround,
   type ViewportBounds,
 } from '../ui/viewport';
@@ -83,14 +83,14 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
   const [progress, setProgress] = useState<Progress>(initialProgress);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [activeBoardId, setActiveBoardId] = useState<number | null>(null);
-  // Temporary on-screen diagnostic (HANDOFF.md item 17/19): this is what
+  // Temporary on-screen diagnostic (HANDOFF.md item 17/19/20): this is what
   // actually found the real bug - the readout showed a perfectly correct
   // viewport (scale/translate exactly matching a manual fitViewport
   // calculation) on a screen that still rendered nothing, which pointed at
-  // how that viewport gets *applied* (viewportTransform, `viewport.ts`)
-  // rather than at the viewport maths or the artwork rendering technique.
-  // Left in for one more round pending on-device confirmation of that fix;
-  // remove once confirmed.
+  // how that viewport gets *applied* (`viewportStyle`, `viewport.ts`) rather
+  // than at the viewport maths or the artwork rendering technique. Left in
+  // for one more round pending on-device confirmation of the latest attempt
+  // at that fix; remove once confirmed.
   const [debugInfo, setDebugInfo] = useState('layout pending');
   const insets = useSafeAreaInsets();
   const prepared = preparedLevelFor(levelId);
@@ -205,13 +205,9 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bounds.canvasWidth, bounds.canvasHeight, scale, translateX, translateY, updateActiveBoard]);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: viewportTransform(
-      { translateX: translateX.value, translateY: translateY.value, scale: scale.value },
-      WALL_PX_WIDTH,
-      WALL_PX_HEIGHT
-    ),
-  }));
+  const animatedStyle = useAnimatedStyle(() =>
+    viewportStyle({ translateX: translateX.value, translateY: translateY.value, scale: scale.value })
+  );
 
   const activeStatus = activeBoardId !== null ? boardStatus(progress, levelId, activeBoardId) : 'locked';
   const showGameplay = activeBoardId !== null && activeStatus !== 'locked';
@@ -280,20 +276,16 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
                   {
                     width: WALL_ARTWORK_NATIVE_WIDTH,
                     height: WALL_ARTWORK_NATIVE_HEIGHT,
-                    // Same visual result as `transform: [{scale}],
-                    // transformOrigin: '0 0'` (still untested on a real
-                    // device - see the debugInfo comment above), but built
-                    // from only `scale`/`translate`, which every RN version
-                    // has always supported: RN's own `{scale}` anchors at the
-                    // element's *centre* by default, landing its top-left
-                    // corner at centre*(1-scale) instead of the origin; the
-                    // translate below cancels exactly that offset so the
-                    // scaled image's top-left corner stays put.
-                    transform: [
-                      { scale: ARTWORK_SCALE },
-                      { translateX: (WALL_ARTWORK_NATIVE_WIDTH / 2) * (ARTWORK_SCALE - 1) },
-                      { translateY: (WALL_ARTWORK_NATIVE_HEIGHT / 2) * (ARTWORK_SCALE - 1) },
-                    ],
+                    // Anchors the scale at the image's own top-left corner
+                    // instead of its centre (RN's default, like CSS's) - see
+                    // `viewportStyle`'s comment in `viewport.ts` for why that
+                    // matters and why this is `[0, 0, 0]` (three plain
+                    // numbers), not a `'0 0'` string (RN's docs say a string
+                    // needs explicit `%`/`px` units to parse, and silently
+                    // falls back to the 50%/50% default otherwise - which is
+                    // what this was before, and why it never worked).
+                    transformOrigin: [0, 0, 0],
+                    transform: [{ scale: ARTWORK_SCALE }],
                   },
                 ]}
               />

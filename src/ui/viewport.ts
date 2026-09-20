@@ -104,32 +104,36 @@ export function canvasToCell(
 }
 
 /**
- * The `transform` array for an `Animated.View` showing this viewport over
- * content of the given size - not just `[{translateX},{translateY},
- * {scale}]`. RN's own `{scale}` (like CSS's) anchors at the element's own
- * *centre* by default, but every function above assumes the origin-anchored
- * convention a Skia `Group transform` actually uses (`BoardCanvas` draws
- * this way, which is why `BoardScreen` never hit this): scale from (0,0),
- * then translate. Skipping this correction doesn't just misalign things by
- * a few pixels - for a wall thousands of units wide at a small `scale`, the
- * centre-anchor error is thousands of pixels, easily enough to push the
- * entire rendered wall off-screen while `translateX`/`translateY`/`scale`
- * all read as perfectly correct (`LevelsScreen`'s and
- * `UnifiedBoardScreen`'s wall - the only two screens that pan/zoom a plain
- * `Animated.View` instead of a Skia canvas - both had this bug).
+ * The style for an `Animated.View` showing this viewport - not just
+ * `{transform: [{translateX},{translateY},{scale}]}`. RN's own `{scale}`
+ * (like CSS's) anchors at the element's own *centre* by default, but every
+ * function above assumes the origin-anchored convention a Skia `Group
+ * transform` actually uses (`BoardCanvas` draws this way, which is why
+ * `BoardScreen` never hit this): scale from (0,0), then translate. Skipping
+ * this doesn't just misalign things by a few pixels - for a wall thousands
+ * of units wide at a small `scale`, the centre-anchor error is thousands of
+ * pixels, easily enough to push the entire rendered wall off-screen while
+ * `translateX`/`translateY`/`scale` all read as perfectly correct
+ * (`LevelsScreen`'s and `UnifiedBoardScreen`'s wall - the only two screens
+ * that pan/zoom a plain `Animated.View` instead of a Skia canvas - both had
+ * this bug). `transformOrigin: [0, 0, 0]` is RN's own, official fix for
+ * exactly this - three plain numbers, not a `'0 0'`-style CSS string (which
+ * RN's docs say needs explicit `%`/`px` units to parse at all, and silently
+ * falls back to the 50%/50% default otherwise).
  */
-export function viewportTransform(
-  viewport: Viewport,
-  contentWidth: number,
-  contentHeight: number
-): Array<{ scale: number } | { translateX: number } | { translateY: number }> {
+export function viewportStyle(viewport: Viewport): {
+  transformOrigin: [number, number, number];
+  transform: Array<{ translateX: number } | { translateY: number } | { scale: number }>;
+} {
   'worklet';
-  const { scale, translateX, translateY } = viewport;
-  return [
-    { scale },
-    { translateX: translateX - (contentWidth / 2) * (1 - scale) },
-    { translateY: translateY - (contentHeight / 2) * (1 - scale) },
-  ];
+  return {
+    transformOrigin: [0, 0, 0],
+    transform: [
+      { translateX: viewport.translateX },
+      { translateY: viewport.translateY },
+      { scale: viewport.scale },
+    ],
+  };
 }
 
 /** Top-left of a cell in canvas coordinates. */
