@@ -128,7 +128,7 @@ export default function DevToolsScreen({ navigation }: Props) {
           <Stepper label="Board" value={boardId} max={BOARDS_PER_LEVEL - 1} onChange={setBoardId} />
           <SettingsRow
             label={`Go to level ${levelId + 1}, board ${boardId + 1}`}
-            onPress={() => navigation.navigate('Board', { levelId, boardId })}
+            onPress={() => navigation.navigate('Boards', { levelId, boardId })}
           />
           <SettingsRow
             label={`Instantly finish level ${levelId + 1} and preview its complete screen`}

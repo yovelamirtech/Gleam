@@ -14,8 +14,6 @@ import { DevToolsProvider, useDevTools } from './src/hooks/useDevTools';
 import { PurchasesProvider } from './src/hooks/usePurchases';
 import { SettingsProvider } from './src/hooks/useSettings';
 import type { RootStackParamList } from './src/navigation/types';
-import BoardRoute from './src/screens/BoardRoute';
-import BoardsScreen from './src/screens/BoardsScreen';
 import DevStoneGalleryScreen from './src/screens/DevStoneGalleryScreen';
 import DevToolsScreen from './src/screens/DevToolsScreen';
 import LevelCompleteScreen from './src/screens/LevelCompleteScreen';
@@ -23,6 +21,7 @@ import LevelsScreen from './src/screens/LevelsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import SplashScreen from './src/screens/SplashScreen';
 import TapToStartScreen from './src/screens/TapToStartScreen';
+import UnifiedBoardScreen from './src/screens/UnifiedBoardScreen';
 import { colors } from './src/theme/colors';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -66,8 +65,7 @@ export default function App() {
                   options={{ gestureEnabled: false }}
                 />
                 <Stack.Screen name="Levels" component={LevelsScreen} />
-                <Stack.Screen name="Boards" component={BoardsScreen} />
-                <Stack.Screen name="Board" component={BoardRoute} />
+                <Stack.Screen name="Boards" component={UnifiedBoardScreen} />
                 <Stack.Screen
                   name="LevelComplete"
                   component={LevelCompleteScreen}

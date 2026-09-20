@@ -10,6 +10,7 @@ import {
 import React, { useMemo, useRef } from 'react';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 
+import { CELL } from '../constants/board';
 import { cellCol, cellRow, stripCells } from '../game/geometry';
 import type { BoardSession } from '../game/session';
 import type { Orientation, Placement } from '../game/types';
@@ -18,8 +19,7 @@ import { numberFont } from '../ui/font';
 import { bakeBoundary } from '../ui/stoneBaking';
 import { theme } from '../ui/theme';
 
-/** One cell in board space. Screen size comes from the viewport transform. */
-export const CELL = 24;
+export { CELL };
 
 export interface DropPreview {
   row: number;

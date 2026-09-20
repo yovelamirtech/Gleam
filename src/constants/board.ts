@@ -10,6 +10,15 @@ export const BOARD_CELLS_X = 40;
 export const BOARD_CELLS_Y = 40;
 export const CELLS_PER_BOARD = BOARD_CELLS_X * BOARD_CELLS_Y; // 1600
 
+/**
+ * One cell in board space, in `BoardCanvas`'s Skia pixels. Kept here rather
+ * than in `BoardCanvas.tsx` itself so plain (non-Skia) modules - like
+ * `src/ui/unifiedBoard.ts`'s wall-space geometry - can share it without
+ * pulling in `@shopify/react-native-skia`, which Jest can't parse outside a
+ * real native runtime.
+ */
+export const CELL = 24;
+
 /** Full level resolution in cells: 320 x 240. */
 export const LEVEL_CELLS_X = BOARDS_X * BOARD_CELLS_X;
 export const LEVEL_CELLS_Y = BOARDS_Y * BOARD_CELLS_Y;

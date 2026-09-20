@@ -413,6 +413,73 @@ through together once a device is available rather than repeating
     deliberately scoped to the single-board rebuild cost alone, as its own
     separately-shippable step, per the plan the user confirmed.
 
+16. **The unified wall, board-level half — an MVP, scoped down from the
+    fullest reading of the ask.** `BoardsScreen`/`BoardRoute` are gone;
+    `UnifiedBoardScreen` (`src/screens/UnifiedBoardScreen.tsx`) is the new
+    'Boards' route target and does both their jobs. Pan/zoom over one
+    continuous canvas of the whole level's 48 boards (mosaic tiles built
+    from the same preview-artwork crop `BoardsScreen` used, now positioned
+    by `src/ui/unifiedBoard.ts`'s wall-space geometry - tested directly in
+    `__tests__/unifiedBoard.test.ts` - instead of a `flexWrap` grid); zoom in
+    on a spot past `PLAYABLE_SCALE` (0.5, roughly 12px/cell) and the board
+    at screen centre becomes live and playable, tracked continuously as you
+    pan (`centreBoardAt`), not just on a tap. Locked boards dim with a lock
+    overlay in place, same as before, just positioned on the wall instead of
+    in a grid cell. `CELL` (the board-space pixel unit `BoardCanvas` already
+    drew in) moved from `BoardCanvas.tsx` to `src/constants/board.ts` so the
+    plain (non-Skia) wall-geometry module could share it without pulling
+    `@shopify/react-native-skia` into code Jest needs to parse without a
+    native runtime. `__tests__/UnifiedBoardScreen.test.tsx` covers the wall
+    rendering every tile, a boardId route param (the dev-tools "jump to a
+    board" shortcut, now `navigation.navigate('Boards', {levelId, boardId})`
+    instead of a separate 'Board' route - `DevToolsScreen.tsx` updated to
+    match) dropping straight into play, a locked target board *not* dropping
+    into play, and exiting a board zooming back out to the wall rather than
+    leaving the level.
+
+    **The scope-down, and why**: the fullest reading of the user's ask (see
+    item 8's quote below) is every nearby board's real stones rendered
+    live, simultaneously, in one shared canvas, with only a thin line - not
+    a mode switch - between the one you're panning across and the one
+    you're actively placing stones on. Building that means teaching
+    `BoardCanvas`'s placement math (built entirely in one board's own local
+    cell coordinates) to place stones in *wall* coordinates across
+    potentially several concurrently-mounted boards' sessions, and picking
+    a design for what non-active-but-visible boards render at high zoom
+    (their own live `BoardCanvas`? A frozen last-known picture?) - real,
+    not-yet-designed work on top of everything already built. Given the
+    round's scope, this instead **reuses `BoardScreen` wholesale** (its own
+    pan/zoom-within-a-board, tray, HUD, onboarding, dev tools, sounds - all
+    already tested, `__tests__/BoardScreen.test.tsx` untouched and still
+    green) as a full-screen overlay the moment the wall's own zoom crosses
+    the playable threshold, instead of rendering that board's stones inside
+    the wall canvas itself. So: **not delivered** - a single canvas with
+    every visible board's real stones drawn together in one frame; neighbour
+    boards actually visible (not just mosaic art) while playing; a *seamless*
+    hand-off animation into play (there's a hard cut between the wall's own
+    pan position and `BoardScreen`'s own `fitViewport`-driven starting
+    zoom/pan, since it's a genuinely separate mounted component with its own
+    view state, not a continuation of the wall's transform). **Delivered**:
+    one continuous pan/zoom canvas replacing the tap-to-navigate grid+screen
+    split (so browsing the whole level is now exactly the same interaction
+    model `LevelsScreen` already uses one layer up); the 48x cell-count
+    multiplier is a non-issue by construction (never more than one live
+    `BoardCanvas`/`BoardSession` mounted at a time, same cost as before this
+    round); entering/leaving play is continuous zoom rather than a
+    `Stack.Navigator` push (no slide transition, returns to the exact pan/
+    zoom the wall was left at). **Not verified on a real device** (see
+    "On-device checklist") - the playable-scale threshold in particular is a
+    guess (`PLAYABLE_SCALE = 0.5` in `src/ui/unifiedBoard.ts`) and may want
+    tuning once someone can actually pinch-zoom on a screen.
+
+    If the fuller, everything-live-at-once version is wanted later: this
+    round's `bakeBoundary`/incremental-picture work (item 15 above) and the
+    wall-space geometry in `src/ui/unifiedBoard.ts` (`boardTilePosition`,
+    `boardAtPoint`, viewport-culling groundwork) are both reusable pieces of
+    it either way - the remaining work is specifically the placement-math
+    and multi-board-rendering redesign described above, not a rewrite of
+    what this round added.
+
 ## Next up
 
 **Start with item 8 below** (the board-level half of the unified wall) —
@@ -449,19 +516,22 @@ images, so it isn't blocking anything.
    (`src/constants/board.ts`), only 7 levels are prepared. The user
    provides source images; run `tools/prep-images` on them the same way
    PR #6 did.
-8. **START HERE — the unified wall, board-level half.** Its own rebuild-cost
-   performance fix (see "Done, continued" item 15 above) is done and merged
-   on this branch; the wall itself below is still not started. When asked
-   for a rendering strategy for the wall, the user said they want the feel
-   of a seamless transition between boards while panning/zooming, and asked
-   what's actually right rather than picking a specific option outright -
-   that design call (viewport-culled full-fidelity boards near the viewport
-   plus some cheaper representation for the rest, most likely, per the
-   performance note below and the `LevelCompleteCanvas` precedent) still
-   needs to be made and, per the user's own ask before this round, checked
-   with them before coding it. The levels wall
+8. **The unified wall, board-level half - an MVP is done, see "Done,
+   continued" items 15-16 above; the fuller version is still open.** Its own
+   rebuild-cost performance fix (item 15) and a first working version of the
+   wall itself (item 16 - one continuous pan/zoom canvas over the whole
+   level's mosaic artwork, zooming in on a spot past a threshold drops you
+   into playing that exact board) are both done and merged on this branch.
+   Item 16's own writeup is explicit about the scope-down from the fullest
+   reading of the ask below: what's still open is every nearby board's real
+   stones rendered live and simultaneously in one shared canvas (this
+   round reuses `BoardScreen` wholesale as a full-screen overlay instead),
+   which needs `BoardCanvas`'s placement math taught to work in wall
+   coordinates across potentially several boards at once - real,
+   not-yet-designed work, described in item 16's "if the fuller version is
+   wanted later" note. The levels wall
    (see "Done" item 14 above) is the same idea at the *levels* layer and
-   is finished; this item is the harder half, still not started: the
+   is finished; this item is the harder half: the
    user's board-level ask, verbatim (Hebrew) —
 
    > "דמיינתי יותר את כל הבורדים מחוברים יחד ורק מופרדים עם קו. אפשר

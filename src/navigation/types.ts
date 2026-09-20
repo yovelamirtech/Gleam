@@ -2,8 +2,8 @@ export type RootStackParamList = {
   Splash: undefined;
   TapToStart: undefined;
   Levels: undefined;
-  Boards: { levelId: number };
-  Board: { levelId: number; boardId: number };
+  /** `boardId` is a dev-tools shortcut only - the player always reaches a board by pinching in on it. */
+  Boards: { levelId: number; boardId?: number };
   LevelComplete: { levelId: number };
   Settings: undefined;
   DevTools: undefined;
