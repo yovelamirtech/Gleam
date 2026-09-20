@@ -382,6 +382,37 @@ through together once a device is available rather than repeating
   until then); does "Restore purchases" in `SettingsScreen` actually find a
   prior purchase after a reinstall.
 
+## Done, continued
+
+15. **Fixed the quadratic stones-picture rebuild in `BoardCanvas`** — the
+    first of item 8's two split-off pieces (see "Next up" item 8's
+    performance note below; the user picked "fix rebuild first, separate
+    PR" when asked). Confirmed with the user before designing the fix.
+    `stonesPicture`'s `useMemo` used to replay every past placement's
+    `drawStone` calls from scratch on every single new placement -
+    O(n) work at the n-th placement, O(n^2) total across a full board fill.
+    New `src/ui/stoneBaking.ts` (`bakeBoundary`, tested directly in
+    `__tests__/stoneBaking.test.ts`) is the pure batch-boundary math: a
+    "baked" picture is kept per session in a ref, advanced one batch of
+    `BAKE_BATCH_SIZE` (16) placements at a time by drawing the *previous*
+    baked picture with a single `canvas.drawPicture()` call (not a replay of
+    every stone already in it) plus that batch's own new stones; only the
+    placements since the last batch boundary are replayed with `drawStone`
+    on every placement, bounded to at most `BAKE_BATCH_SIZE - 1` stones.
+    Total draw-call work across a full fill is now O(n * BAKE_BATCH_SIZE),
+    not O(n^2). The baked cache resets whenever the `BoardSession` identity
+    changes (a different board), detected inside the memo itself rather than
+    a separate `useEffect`, to avoid a stale-cache render on the first frame
+    of a new board. `BoardSession.history` only ever grows (no undo), so no
+    shrink case to handle. **Not profiled on a real device** (see "On-device
+    checklist") - this is the same "code-reading only" caveat as the rest of
+    the performance note below; it should make a real difference given the
+    O(n^2) -> O(n * batch) shape of the fix, but hasn't been measured. Also
+    not yet started: the wall's 48x cell-count multiplier and the
+    viewport-culling question the performance note raises below - this was
+    deliberately scoped to the single-board rebuild cost alone, as its own
+    separately-shippable step, per the plan the user confirmed.
+
 ## Next up
 
 **Start with item 8 below** (the board-level half of the unified wall) —
@@ -418,7 +449,17 @@ images, so it isn't blocking anything.
    (`src/constants/board.ts`), only 7 levels are prepared. The user
    provides source images; run `tools/prep-images` on them the same way
    PR #6 did.
-8. **START HERE — the unified wall, board-level half.** The levels wall
+8. **START HERE — the unified wall, board-level half.** Its own rebuild-cost
+   performance fix (see "Done, continued" item 15 above) is done and merged
+   on this branch; the wall itself below is still not started. When asked
+   for a rendering strategy for the wall, the user said they want the feel
+   of a seamless transition between boards while panning/zooming, and asked
+   what's actually right rather than picking a specific option outright -
+   that design call (viewport-culled full-fidelity boards near the viewport
+   plus some cheaper representation for the rest, most likely, per the
+   performance note below and the `LevelCompleteCanvas` precedent) still
+   needs to be made and, per the user's own ask before this round, checked
+   with them before coding it. The levels wall
    (see "Done" item 14 above) is the same idea at the *levels* layer and
    is finished; this item is the harder half, still not started: the
    user's board-level ask, verbatim (Hebrew) —
