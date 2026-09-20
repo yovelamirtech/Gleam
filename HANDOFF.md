@@ -308,8 +308,32 @@ point forward.
 
 ## On-device checklist
 
-Nothing in this project has been run on a real device or simulator this
-whole build (remote container, nothing attached) — every item below is
+The user did the project's first real on-device test this round (Expo Go)
+and hit a real bug immediately: the app launched fine and the levels wall
+showed right after Tap to Start, then the whole app crashed on the very
+first touch. Root cause: `react-native-worklets` (the engine
+`react-native-reanimated` 4 uses) needs Metro's `inlineRequires` transform
+enabled to initialise, and this project had no `metro.config.js` at all, so
+Expo's own default (`inlineRequires` off) silently applied - the crash only
+surfaces the moment a worklet actually runs, i.e. the first pan/pinch/tap,
+which is why nothing looked wrong before that. Fixed by a new
+`metro.config.js` (`transformer.getTransformOptions` -> `inlineRequires:
+true`), shipped as its own PR against `main`
+(`claude/fix-expo-go-worklets-crash`, independent of the unified-wall PR
+since it's infrastructure, not feature work, and affects every
+gesture-driven screen that already existed) as well as on the unified-wall
+branch itself. **Not yet confirmed fixed on a real device** - the user found
+the bug live but hadn't re-tested with the fix as of this note; do that
+before assuming it's actually resolved, since this project cannot reproduce
+or verify the crash from this environment at all (nothing here can run
+Expo Go). If it turns out *not* to fix it, the versions themselves were
+double-checked and are not the problem (`react-native-worklets@0.10.1` /
+`react-native-reanimated@4.5.1` are exactly what Expo SDK 57 bundles) - look
+next at whether New Architecture is actually enabled, and at
+`babel.config.js`'s `react-native-worklets/plugin` ordering.
+
+Nothing else in this project has been run on a real device or simulator
+this whole build (remote container, nothing attached) — every item below is
 still open, gathered here in one place per the user's request, to go
 through together once a device is available rather than repeating
 "not checked on a real device" scattered through this file:
