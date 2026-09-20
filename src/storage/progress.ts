@@ -36,11 +36,11 @@ function emptyLevel(status: BoardStatus): LevelProgress {
   return { status, boards: {} };
 }
 
-/** Level 1 open, everything else locked until a neighbour is completed. */
+/** The wall's centre level starts open; everything else unlocks by neighbour. */
 export function initialProgress(): Progress {
   const levels: Record<number, LevelProgress> = {};
   for (let i = 0; i < LEVEL_COUNT; i += 1) {
-    levels[i] = emptyLevel(i === 0 ? 'unlocked' : 'locked');
+    levels[i] = emptyLevel(i === centreLevelId() ? 'unlocked' : 'locked');
   }
   return { levels, onboardingSeen: false };
 }
@@ -63,6 +63,13 @@ export function centreBoardId(): number {
   const col = Math.floor(BOARDS_X / 2);
   const row = Math.floor(BOARDS_Y / 2);
   return row * BOARDS_X + col;
+}
+
+/** The levels wall's actual centre tile, same row/col math as `centreBoardId`. */
+export function centreLevelId(): number {
+  const col = Math.floor(LEVELS_X / 2);
+  const row = Math.floor(LEVELS_Y / 2);
+  return row * LEVELS_X + col;
 }
 
 export async function loadProgress(): Promise<Progress> {
