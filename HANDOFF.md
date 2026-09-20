@@ -350,9 +350,46 @@ makes internally) *before* ever calling `useIAP`, splitting into
 `LiveIapPurchasesProvider` (today's behaviour, unchanged) and
 `DisabledPurchasesProvider` (cache-only, harmless no-op buy/restore).
 `__tests__/iapUnavailable.test.tsx` proves the fallback. Also folded into
-both the unified-wall branch and the `claude/fix-expo-go-worklets-crash` PR
-- **also not yet confirmed fixed on a real device**, same caveat as the
-worklets crash above.
+both the unified-wall branch and the `claude/fix-expo-go-worklets-crash` PR.
+
+**A third crash remained after both of those fixes, and this one turned out
+to be the real, root cause** - confirmed from the device's own crash log
+(an `.ips` file the user pulled from Settings -> Privacy & Security ->
+Analytics & Improvements -> Analytics Data and shared directly, after
+Metro's own terminal showed nothing at all - only Skia deprecation
+warnings, no error). The `.ips` file's faulting thread was unambiguous:
+
+```
+UIGestureRecognizer -> reanimated::handleEvent -> runSyncOnRuntime
+  -> Hermes call() -> throwPendingError() -> uncaught -> abort()
+```
+
+A JS exception was being thrown *inside a worklet running on the UI
+thread*, with nothing to catch it - a genuine crash, not an Expo Go/
+environment quirk, and not something either of the first two fixes could
+have touched. `LevelsScreen`'s tap gesture calls `levelAtPoint()` directly
+from its `onEnd` worklet, but `levelAtPoint` (`src/ui/levelsWall.ts`) was
+never marked `'worklet'` - unlike every other cross-thread helper in this
+codebase (`src/ui/viewport.ts`'s functions all explicitly start with
+`'worklet';`, exactly for this reason, per that file's own doc comment).
+Under Reanimated 4, calling a plain (non-worklet) function from a
+UI-thread worklet doesn't degrade gracefully - it crashes the whole app
+natively, with nothing catchable on the JS side, which is exactly why nothing
+showed up in Metro or as a red screen. This bug has been in already-merged
+`main` code since the earlier unified-levels-wall PR (#10) - it predates
+this session entirely, just never got exercised on a real device until now.
+Fixed by adding the `'worklet'` directive to `levelAtPoint`. Checked every
+other gesture worklet in the codebase (`BoardScreen.tsx`,
+`UnifiedBoardScreen.tsx`, `LevelsScreen.tsx`'s own pan/pinch) for the same
+pattern - all fine, either calling already-worklet-marked helpers
+(`clampViewport`/`zoomAround`) or routing through `runOnJS` correctly.
+Folded into both the unified-wall branch and
+`claude/fix-expo-go-worklets-crash`. **Still not confirmed fixed on a real
+device** as of this note - this is the third attempt, and only a real
+device can confirm whether the app is now actually stable end to end (the
+`.ips` file's precision this time makes it a much stronger fix than the
+first two, but "the crash log points here" isn't the same as "verified
+gone").
 
 Nothing else in this project has been run on a real device or simulator
 this whole build (remote container, nothing attached) — every item below is
