@@ -240,6 +240,30 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
       <GestureDetector gesture={gesture}>
         <View style={styles.wallWrap} onLayout={onLayout} testID="board-wall">
           <Animated.View style={[{ width: WALL_PX_WIDTH, height: WALL_PX_HEIGHT }, animatedStyle]}>
+            {prepared?.previewSource ? (
+              // One shared Image for the whole level, not one per tile: each
+              // tile used to render its own copy of this artwork inside a
+              // `position:'absolute'` box with both an `overflow:'hidden'`
+              // parent *and* its own `transform: scale` - correct in every
+              // test (RN Testing Library never actually rasterizes anything),
+              // but a real device rendered nothing at all until the wall was
+              // zoomed in far past where the wall's own transform should have
+              // made that unnecessary. One plain, untransformed-parent Image
+              // behind the tiles removes that combination entirely; the tiles
+              // above it are just borders and lock/complete overlays now.
+              <Image
+                source={prepared.previewSource}
+                style={[
+                  styles.wallArtworkImage,
+                  {
+                    width: BOARDS_X * PREVIEW_BOARD_PX,
+                    height: BOARDS_Y * PREVIEW_BOARD_PX,
+                    transform: [{ scale: ARTWORK_SCALE }],
+                    transformOrigin: '0 0',
+                  },
+                ]}
+              />
+            ) : null}
             {Array.from({ length: BOARDS_PER_LEVEL }, (_, boardId) => {
               const status = boardStatus(progress, levelId, boardId);
               const { x, y } = boardTilePosition(boardId);
@@ -251,7 +275,7 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
                   y={y}
                   locked={status === 'locked'}
                   completed={status === 'completed'}
-                  previewSource={prepared?.previewSource}
+                  hasArtwork={Boolean(prepared?.previewSource)}
                 />
               );
             })}
@@ -292,50 +316,29 @@ function BoardTile({
   y,
   locked,
   completed,
-  previewSource,
+  hasArtwork,
 }: {
   boardId: number;
   x: number;
   y: number;
   locked: boolean;
   completed: boolean;
-  previewSource?: number;
+  hasArtwork: boolean;
 }) {
-  const col = boardId % BOARDS_X;
-  const row = Math.floor(boardId / BOARDS_X);
-
   return (
     <View
       testID={`board-tile-${boardId}`}
       style={[styles.tile, { left: x, top: y, width: BOARD_PX_X, height: BOARD_PX_Y }]}
     >
-      {previewSource ? (
-        <View style={styles.tileArtwork}>
-          <Image
-            source={previewSource}
-            style={[
-              styles.tileArtworkImage,
-              {
-                // Decoded at the source PNG's own resolution (a few hundred
-                // px) and blown up to wall size by a GPU transform, not by
-                // native width/height: 48 tiles each decoding a copy of the
-                // artwork *upscaled* to its wall-space size (thousands of px
-                // square) is tens of megapixels each, ~48x over - on a real
-                // device that's the difference between this rendering and a
-                // blank white screen with everything pushed off-bounds.
-                width: BOARDS_X * PREVIEW_BOARD_PX,
-                height: BOARDS_Y * PREVIEW_BOARD_PX,
-                left: -col * BOARD_PX_X,
-                top: -row * BOARD_PX_Y,
-                transform: [{ scale: ARTWORK_SCALE }],
-                transformOrigin: '0 0',
-              },
-              locked && styles.tileImageLocked,
-            ]}
-          />
+      {hasArtwork ? (
+        <>
+          {/* The artwork itself is one shared Image behind every tile (see
+              above) - a locked tile used to also dim its own copy of the
+              image directly; this overlay alone reads as "locked" just as
+              well without needing a second, per-tile Image. */}
           {locked && <View style={styles.tileLockOverlay} pointerEvents="none" />}
           {completed && <View style={styles.tileCompletedBorder} pointerEvents="none" />}
-        </View>
+        </>
       ) : (
         <View style={[styles.tilePlaceholder, locked && styles.tilePlaceholderLocked]} />
       )}
@@ -382,9 +385,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(31, 41, 51, 0.25)',
     overflow: 'hidden',
   },
-  tileArtwork: { flex: 1 },
-  tileArtworkImage: { position: 'absolute' },
-  tileImageLocked: { opacity: 0.35 },
+  wallArtworkImage: { position: 'absolute', left: 0, top: 0 },
   tileLockOverlay: {
     position: 'absolute',
     top: 0,
