@@ -637,6 +637,44 @@ through together once a device is available rather than repeating
     `__tests__/LevelsScreen.test.tsx`) were updated to the new centre-first
     geometry rather than deleted. **Not yet confirmed on a real device.**
 
+19. **Both walls' pan/zoom viewport was rendering thousands of pixels off
+    the actual screen - the real root cause behind item 17's board-wall-
+    blank bug and a bug in the levels wall nobody had noticed** (found via
+    an on-screen debug readout, then confirmed by simulating the exact
+    numbers by hand). `clampViewport`/`fitViewport`/`zoomAround`
+    (`src/ui/viewport.ts`) assume an origin-anchored scale - translate, then
+    scale from `(0,0)` - the natural convention for pan/zoom camera maths,
+    and exactly what a Skia `Group transform` does (`BoardCanvas`, which is
+    why `BoardScreen`'s own pan/zoom never had this bug). But
+    `LevelsScreen`/`UnifiedBoardScreen` apply that same viewport to a plain
+    `Animated.View` via a `transform` style, and RN's own `{scale}` (like
+    CSS's) anchors at the element's own *centre* by default, not the
+    origin. For the levels wall (800x1000 content) that's a few hundred
+    pixels of error - tiles visibly present, just bunched in a corner
+    instead of centred/filling the screen. For the board wall (7680x5760
+    content) the same error is thousands of pixels - enough to push the
+    entire wall off any phone screen, regardless of how individual tiles'
+    artwork was drawn (which is why item 17's three different artwork
+    rendering attempts all failed identically).
+
+    Fixed with `viewportStyle()` (`src/ui/viewport.ts`), using RN's own
+    documented mechanism for this exact problem, `transformOrigin: [0, 0,
+    0]` (three plain numbers), instead of trying to manually reconstruct an
+    origin-anchored scale from `scale`/`translate` primitives - a first
+    attempt at that manual approach shipped and had *no effect on device*,
+    because it depended on correctly guessing the order RN composes
+    multiple ops within one `transform` array, which turned out to be
+    guessed wrong. That failed attempt also explains why an *earlier* fix
+    (item 17, the board wall's per-tile artwork `Image`) never worked
+    either: it used `transformOrigin: '0 0'` - a string, and RN's docs say a
+    CSS-syntax string needs explicit `%`/`px` units to parse at all;
+    unitless `'0 0'` was almost certainly silently invalid and fell back to
+    the default 50%/50% (centre) origin the whole time. Both screens'
+    `animatedStyle` and the board wall's artwork `Image` now use the
+    `[0, 0, 0]` array form throughout. **Not yet confirmed on a real
+    device** - a debug readout (`testID="board-wall-debug"` on
+    `UnifiedBoardScreen`) is still in place pending that confirmation.
+
 ## Next up
 
 **Start with item 8 below** (the board-level half of the unified wall) —
