@@ -332,6 +332,28 @@ double-checked and are not the problem (`react-native-worklets@0.10.1` /
 next at whether New Architecture is actually enabled, and at
 `babel.config.js`'s `react-native-worklets/plugin` ordering.
 
+**A second, unrelated crash surfaced right after that first fix**:
+`Uncaught (in promise, id: 0): "Error: Cannot find native module 'ExpoIap'"`.
+`expo-iap` doesn't throw at *import* time when its native module is missing
+(unlike `react-native-google-mobile-ads`, see "Ads/IAP and plain Expo Go"
+below) - it resolves the module lazily through a Proxy. But `useIAP()`
+itself registers its purchase-update/error listeners *before* its own
+`initConnection` try/catch (read directly out of `expo-iap`'s own source,
+`node_modules/expo-iap/build/useIAP.js`), and those listener functions
+resolve the native module eagerly and throw synchronously when it's missing
+- inside an `async` function nobody awaits, so it surfaces as an unhandled
+promise rejection instead of the graceful "not connected" state the rest of
+`useIAP` degrades to. Fixed the same way the ads module already handles
+this class of bug: `src/hooks/usePurchases.tsx`'s `PurchasesProvider` now
+checks `requireNativeModule('ExpoIap')` itself (the same call `expo-iap`
+makes internally) *before* ever calling `useIAP`, splitting into
+`LiveIapPurchasesProvider` (today's behaviour, unchanged) and
+`DisabledPurchasesProvider` (cache-only, harmless no-op buy/restore).
+`__tests__/iapUnavailable.test.tsx` proves the fallback. Also folded into
+both the unified-wall branch and the `claude/fix-expo-go-worklets-crash` PR
+- **also not yet confirmed fixed on a real device**, same caveat as the
+worklets crash above.
+
 Nothing else in this project has been run on a real device or simulator
 this whole build (remote container, nothing attached) — every item below is
 still open, gathered here in one place per the user's request, to go
