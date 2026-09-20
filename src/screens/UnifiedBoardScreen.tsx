@@ -316,10 +316,19 @@ function BoardTile({
             style={[
               styles.tileArtworkImage,
               {
-                width: BOARDS_X * PREVIEW_BOARD_PX * ARTWORK_SCALE,
-                height: BOARDS_Y * PREVIEW_BOARD_PX * ARTWORK_SCALE,
+                // Decoded at the source PNG's own resolution (a few hundred
+                // px) and blown up to wall size by a GPU transform, not by
+                // native width/height: 48 tiles each decoding a copy of the
+                // artwork *upscaled* to its wall-space size (thousands of px
+                // square) is tens of megapixels each, ~48x over - on a real
+                // device that's the difference between this rendering and a
+                // blank white screen with everything pushed off-bounds.
+                width: BOARDS_X * PREVIEW_BOARD_PX,
+                height: BOARDS_Y * PREVIEW_BOARD_PX,
                 left: -col * BOARD_PX_X,
                 top: -row * BOARD_PX_Y,
+                transform: [{ scale: ARTWORK_SCALE }],
+                transformOrigin: '0 0',
               },
               locked && styles.tileImageLocked,
             ]}
