@@ -372,8 +372,14 @@ const styles = StyleSheet.create({
   },
   tile: {
     position: 'absolute',
-    borderWidth: 0.5,
-    borderColor: colors.border,
+    // In wall-space units, not screen px: the wall's own fit-to-screen scale
+    // is roughly 1/20 on a phone (48 boards on one canvas), so a border has
+    // to be this many units wide just to survive as one visible pixel once
+    // the Animated.View's transform shrinks everything down to fit - the old
+    // 0.5 born from copying BoardsScreen's per-tile styling, where borders
+    // were never inside a scaled-down transform to begin with.
+    borderWidth: BOARD_PX_X * 0.02,
+    borderColor: 'rgba(31, 41, 51, 0.25)',
     overflow: 'hidden',
   },
   tileArtwork: { flex: 1 },
@@ -396,6 +402,10 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: colors.completed,
   },
-  tilePlaceholder: { flex: 1, backgroundColor: colors.surface },
-  tilePlaceholderLocked: { backgroundColor: colors.locked },
+  // Deliberately more saturated than colors.surface/locked: those read as
+  // near-identical to colors.background once the wall's fit-to-screen scale
+  // (~1/20) flattens out subtle tone differences, which is what made a level
+  // with no prepared artwork yet look like a blank white screen.
+  tilePlaceholder: { flex: 1, backgroundColor: '#E2E8F1' },
+  tilePlaceholderLocked: { backgroundColor: '#C9D3E0' },
 });
