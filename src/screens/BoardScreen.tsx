@@ -79,10 +79,26 @@ export function BoardScreen({ board, originX = 0, originY = 0, translateX, trans
 
   /** Guards against firing onComplete again on every later revision. */
   const completedRef = useRef(false);
+  /** Whether stored progress has finished loading at least once for this board. */
+  const hydratedRef = useRef(false);
   useEffect(() => {
     completedRef.current = false;
+    hydratedRef.current = false;
   }, [board.id]);
   useEffect(() => {
+    if (!ready) return;
+    if (!hydratedRef.current) {
+      // The unified board wall (HANDOFF.md item 22) remounts this screen every
+      // time a board crosses PLAYABLE_SCALE, so re-opening an already-solved
+      // board replays this same restore-from-storage path on every zoom back
+      // in. The first time stored progress finishes loading is that restore,
+      // not a placement happening now, so it must never replay the solve
+      // sound or re-fire onComplete - only a genuine completion after this
+      // point should.
+      hydratedRef.current = true;
+      completedRef.current = session.isComplete();
+      return;
+    }
     if (!completedRef.current && session.isComplete()) {
       completedRef.current = true;
       sounds.onBoardComplete();
@@ -90,7 +106,7 @@ export function BoardScreen({ board, originX = 0, originY = 0, translateX, trans
     }
     // sounds' identity changes with the settings toggle; only board completion should re-fire this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, revision, onComplete]);
+  }, [ready, session, revision, onComplete]);
 
   // First-run coach marks. `null` means "still checking storage" so the
   // overlay never flashes on for a returning player while that resolves.
