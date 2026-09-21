@@ -364,9 +364,17 @@ export function BoardScreen({ board, originX = 0, originY = 0, translateX, trans
   return (
     // The airborne stones sit outside the safe-area view on purpose: they are
     // positioned in screen coordinates, and a padded parent would shift them.
-    <View style={styles.screen}>
-      <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
-        <View style={styles.boardArea}>
+    // box-none, not the default 'auto': a plain View still claims every touch
+    // that lands on it even with no handler of its own, which stopped the
+    // wall's pinch gesture (a sibling underneath, not an ancestor - RNGH's
+    // recognizer only sees touches whose hit-tested view is inside its own
+    // subtree) dead the instant this screen covered it. box-none makes these
+    // wrapper views transparent to hit-testing wherever a real child
+    // (canvas is already 'none', tray/color-picker/dev button are not) isn't
+    // actually there to claim the touch.
+    <View style={styles.screen} pointerEvents="box-none">
+      <SafeAreaView style={styles.screen} edges={['top', 'bottom']} pointerEvents="box-none">
+        <View style={styles.boardArea} pointerEvents="box-none">
           {/* No gesture of its own any more (see the viewport comment above) -
               `pointerEvents="none"` keeps it from ever competing for the
               touch that the board wall's own pan/pinch gesture, underneath
