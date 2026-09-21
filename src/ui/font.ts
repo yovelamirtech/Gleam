@@ -1,23 +1,22 @@
-import { Skia, type SkFont } from '@shopify/react-native-skia';
+import { matchFont, type SkFont } from '@shopify/react-native-skia';
 
 const cache = new Map<number, SkFont | null>();
 
 /**
  * Font at a given size, for the numbers printed on empty cells.
  *
- * Built via the zero-argument `Skia.Font()` plus `setSize`, not
- * `Skia.Font(undefined, size)` - the native constructor branches on the JS
- * *argument count*, and passing `undefined` explicitly still counts as one:
- * with two arguments it always tries to read a typeface out of `arguments[0]`
- * (`JsiSkTypeface::fromValue`, in `JsiSkFont.h`'s `createCtor`), and doing
- * that to a JS `undefined` throws on device (confirmed via the `fontMissing`
- * debug flag on a real iOS device) while `RN Testing Library`'s mock never
- * exercises the real native binding, so every test passed anyway. Calling
- * `Skia.Font()` with zero arguments takes a different branch that builds a
- * plain default `SkFont` with no typeface lookup at all, so there is nothing
- * left to fail this way; `setSize` alone can't throw.
+ * `Skia.Font()` (no typeface) leaves the font's typeface null, and drawing
+ * with a null typeface renders nothing - no crash, no error, just zero
+ * glyphs (confirmed on a real device via the `fontMissing`/`drawTextError`
+ * debug flags both reading clean while every cell still came up blank).
+ * `matchFont` goes through the platform's real font manager instead: its
+ * default family, `"System"`, is aliased by react-native-skia itself to an
+ * actual system font (`.AppleSystemUIFont` on iOS - see
+ * `JsiSkFontMgr.h`'s `matchFamilyStyle`, which calls
+ * `resolveFontFamily("System")` before the native lookup), so it resolves to
+ * a typeface that actually has glyphs.
  *
- * Returns null only if `Skia.Font()` itself throws, so callers can still
+ * Returns null only if `matchFont` itself throws, so callers can still
  * simply skip the numbers instead of crashing the board.
  */
 export function numberFont(size: number): SkFont | null {
@@ -26,8 +25,7 @@ export function numberFont(size: number): SkFont | null {
   if (cached !== undefined) return cached;
   let font: SkFont | null = null;
   try {
-    font = Skia.Font();
-    font.setSize(size);
+    font = matchFont({ fontSize: size });
   } catch {
     font = null;
   }
