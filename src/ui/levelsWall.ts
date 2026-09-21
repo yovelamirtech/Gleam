@@ -4,6 +4,14 @@ import { levelIdAt, levelPosition } from '../game/levelLayout';
 /** One tile's edge length in wall-space units (board-space, not screen pixels). */
 export const LEVEL_TILE = 200;
 
+/**
+ * Visual gap between neighbouring level tiles, in the same wall-space units -
+ * shrinks each tile's own rendered box within its slot rather than spacing
+ * the slots themselves, so `levelTilePosition`/`levelAtPoint`'s grid math
+ * (and every test built on it) stays untouched.
+ */
+export const LEVEL_TILE_GAP = LEVEL_TILE * 0.06;
+
 export const WALL_WIDTH = LEVELS_X * LEVEL_TILE;
 export const WALL_HEIGHT = LEVELS_Y * LEVEL_TILE;
 
