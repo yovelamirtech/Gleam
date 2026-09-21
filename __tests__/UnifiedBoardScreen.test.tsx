@@ -12,6 +12,15 @@ jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (effect: () => void) => require('react').useEffect(effect, []),
 }));
 
+// The wall's own grid overlay is a Skia canvas too, same reasoning as BoardCanvas below.
+jest.mock('../src/components/WallGridCanvas', () => {
+  const { View } = require('react-native');
+  return {
+    WallGridCanvas: (props: { width: number; height: number }) => (
+      <View testID="wall-grid-canvas" {...props} />
+    ),
+  };
+});
 // The Skia canvas needs a native surface, same reasoning as BoardScreen.test.tsx.
 jest.mock('../src/components/BoardCanvas', () => {
   const { View } = require('react-native');

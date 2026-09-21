@@ -14,8 +14,8 @@ import { CELL } from '../constants/board';
 import { cellCol, cellRow, stripCells } from '../game/geometry';
 import type { BoardSession } from '../game/session';
 import type { Orientation, Placement } from '../game/types';
+import { drawBoardGrid } from '../ui/boardGrid';
 import { drawStone, strokePaint } from '../ui/drawStone';
-import { numberFont } from '../ui/font';
 import { bakeBoundary } from '../ui/stoneBaking';
 import { theme } from '../ui/theme';
 
@@ -69,34 +69,10 @@ export function BoardCanvas({
 
   const gridPicture = useMemo(
     () =>
-      createPicture((canvas) => {
-        const background = Skia.Paint();
-        background.setColor(Skia.Color(theme.boardBackground));
-        canvas.drawRect(Skia.XYWHRect(0, 0, board.width * CELL, board.height * CELL), background);
-
-        const cell = Skia.Paint();
-        cell.setColor(Skia.Color(theme.cellEmpty));
-        const grid = strokePaint(theme.cellGrid, 1, 1);
-        const label = Skia.Paint();
-        label.setAntiAlias(true);
-        label.setColor(Skia.Color(theme.cellNumber));
-        const font = numberFont(CELL * 0.5);
-
-        for (let row = 0; row < board.height; row += 1) {
-          for (let col = 0; col < board.width; col += 1) {
-            const x = col * CELL;
-            const y = row * CELL;
-            const rect = Skia.XYWHRect(x + 1, y + 1, CELL - 2, CELL - 2);
-            canvas.drawRect(rect, cell);
-            canvas.drawRect(rect, grid);
-            if (!font) continue;
-            // A cell shows its number only, never its colour.
-            const text = String(board.palette[board.cells[row * board.width + col]].number);
-            const textWidth = font.getTextWidth(text);
-            canvas.drawText(text, x + (CELL - textWidth) / 2, y + CELL * 0.68, label, font);
-          }
-        }
-      }, Skia.XYWHRect(0, 0, board.width * CELL, board.height * CELL)),
+      createPicture(
+        (canvas) => drawBoardGrid(canvas, board, 0, 0),
+        Skia.XYWHRect(0, 0, board.width * CELL, board.height * CELL)
+      ),
     [board]
   );
 
