@@ -1,14 +1,15 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useMemo, useState } from 'react';
-import { Image, LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
+import { LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BannerAdBox } from '../ads/BannerAdBox';
 import SettingsButton from '../components/SettingsButton';
-import { BOARDS_PER_LEVEL, BOARDS_X, BOARDS_Y, BOARD_CELLS_X, CELL } from '../constants/board';
+import { WallGridCanvas } from '../components/WallGridCanvas';
+import { BOARDS_PER_LEVEL } from '../constants/board';
 import { preparedLevelFor } from '../game/levels';
 import { createPlaceholderBoard } from '../game/placeholderBoard';
 import type { BoardData } from '../game/types';
@@ -42,25 +43,10 @@ import BoardScreen from './BoardScreen';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Boards'>;
 
-/** Pixels per cell in `preview.png`, `tools/prep-images`' default (`--preview-scale`). */
-const PREVIEW_SCALE_PX = 3;
-const PREVIEW_BOARD_PX = BOARD_CELLS_X * PREVIEW_SCALE_PX;
 /**
- * Scales the whole level's `preview.png` so one board's slice of it exactly
- * covers one `BOARD_PX_X`-square wall tile. A fixed constant, not computed
- * from the screen's own size the way `BoardsScreen` used to (`artworkScale`
- * there): every tile here has a fixed size in wall-space units regardless of
- * zoom, since the wall's own pan/zoom transform is what makes it bigger or
- * smaller on screen.
- */
-const ARTWORK_SCALE = CELL / PREVIEW_SCALE_PX;
-/** The whole level's `preview.png` at its own native resolution (960x720 for an 8x6 wall of 40-cell boards at 3px/cell). */
-const WALL_ARTWORK_NATIVE_WIDTH = BOARDS_X * PREVIEW_BOARD_PX;
-const WALL_ARTWORK_NATIVE_HEIGHT = BOARDS_Y * PREVIEW_BOARD_PX;
-
-/**
- * The unified board wall (HANDOFF.md item 8): every board of a level's full
- * preview artwork on one continuous pannable/zoomable canvas, thin tile
+ * The unified board wall (HANDOFF.md item 8): every board of a level drawn as
+ * its own real, empty grid - the numbers a player needs to plan a drop, via
+ * `WallGridCanvas` - on one continuous pannable/zoomable canvas, thin tile
  * borders standing in for the hard screen-to-screen transition
  * `BoardsScreen`/`BoardRoute` used to have. Pinching in on a spot past
  * `PLAYABLE_SCALE` swaps that board's tile for a live, playable
@@ -68,30 +54,19 @@ const WALL_ARTWORK_NATIVE_HEIGHT = BOARDS_Y * PREVIEW_BOARD_PX;
  * back out returns to exactly where the wall was left.
  *
  * Scoped-down from the fullest reading of the user's ask (see HANDOFF.md item
- * 8): only the board the viewport is centred on ever becomes a live Skia
- * board: this reuses `BoardScreen` wholesale (its own pan/zoom, tray, HUD,
- * onboarding, dev tools, sounds - all already tested) rather than rendering
- * every nearby board's stones inside one shared canvas, which would need a
- * much larger rewrite of that gesture/session code to place stones in wall
- * coordinates. So the wall shows only mosaic artwork right up to the moment
- * you're zoomed in enough to play - never a *second* live board rendered
- * next to the one you're playing - and entering/leaving play is a hand-off
- * between two components, not a single continuously-animated canvas.
+ * 8): only the board the viewport is centred on ever becomes a live, playable
+ * `BoardScreen` (its own pan/zoom, tray, HUD, onboarding, dev tools, sounds -
+ * all already tested) rather than every nearby board sharing one interactive
+ * session, which would need a much larger rewrite of the gesture/session code
+ * to place stones across board boundaries. So entering/leaving play is still
+ * a hand-off between two components, not a single continuously-animated
+ * canvas with one shared session.
  */
 export default function UnifiedBoardScreen({ navigation, route }: Props) {
   const { levelId, boardId: targetBoardId } = route.params;
   const [progress, setProgress] = useState<Progress>(initialProgress);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [activeBoardId, setActiveBoardId] = useState<number | null>(null);
-  // Temporary on-screen diagnostic (HANDOFF.md item 17/19/20): this is what
-  // actually found the real bug - the readout showed a perfectly correct
-  // viewport (scale/translate exactly matching a manual fitViewport
-  // calculation) on a screen that still rendered nothing, which pointed at
-  // how that viewport gets *applied* (`viewportStyle`, `viewport.ts`) rather
-  // than at the viewport maths or the artwork rendering technique. Left in
-  // for one more round pending on-device confirmation of the latest attempt
-  // at that fix; remove once confirmed.
-  const [debugInfo, setDebugInfo] = useState('layout pending');
   const insets = useSafeAreaInsets();
   const prepared = preparedLevelFor(levelId);
 
@@ -184,10 +159,6 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
       translateX.value = start.translateX;
       translateY.value = start.translateY;
       scale.value = start.scale;
-      setDebugInfo(
-        `canvas ${width.toFixed(0)}x${height.toFixed(0)} wall ${WALL_PX_WIDTH}x${WALL_PX_HEIGHT} ` +
-          `scale ${start.scale.toFixed(4)} tx ${start.translateX.toFixed(1)} ty ${start.translateY.toFixed(1)}`
-      );
     },
     [targetBoardId, translateX, translateY, scale, canvasSize.width]
   );
@@ -279,39 +250,20 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
     <View style={styles.screen}>
       <GestureDetector gesture={gesture}>
         <View style={styles.wallWrap} onLayout={onLayout} testID="board-wall">
-          <Animated.View style={[{ width: WALL_PX_WIDTH, height: WALL_PX_HEIGHT }, animatedStyle]}>
-            {prepared?.previewSource ? (
-              // One shared Image for the whole level, not one per tile: each
-              // tile used to render its own copy of this artwork inside a
-              // `position:'absolute'` box with both an `overflow:'hidden'`
-              // parent *and* its own `transform: scale` - correct in every
-              // test (RN Testing Library never actually rasterizes anything),
-              // but a real device rendered nothing at all until the wall was
-              // zoomed in far past where the wall's own transform should have
-              // made that unnecessary. One plain, untransformed-parent Image
-              // behind the tiles removes that combination entirely; the tiles
-              // above it are just borders and lock/complete overlays now.
-              <Image
-                source={prepared.previewSource}
-                style={[
-                  styles.wallArtworkImage,
-                  {
-                    width: WALL_ARTWORK_NATIVE_WIDTH,
-                    height: WALL_ARTWORK_NATIVE_HEIGHT,
-                    // Anchors the scale at the image's own top-left corner
-                    // instead of its centre (RN's default, like CSS's) - see
-                    // `viewportStyle`'s comment in `viewport.ts` for why that
-                    // matters and why this is `[0, 0, 0]` (three plain
-                    // numbers), not a `'0 0'` string (RN's docs say a string
-                    // needs explicit `%`/`px` units to parse, and silently
-                    // falls back to the 50%/50% default otherwise - which is
-                    // what this was before, and why it never worked).
-                    transformOrigin: [0, 0, 0],
-                    transform: [{ scale: ARTWORK_SCALE }],
-                  },
-                ]}
+          {canvasSize.width > 0 ? (
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              <WallGridCanvas
+                prepared={prepared}
+                levelId={levelId}
+                width={canvasSize.width}
+                height={canvasSize.height}
+                translateX={translateX}
+                translateY={translateY}
+                scale={scale}
               />
-            ) : null}
+            </View>
+          ) : null}
+          <Animated.View style={[{ width: WALL_PX_WIDTH, height: WALL_PX_HEIGHT }, animatedStyle]}>
             {Array.from({ length: BOARDS_PER_LEVEL }, (_, boardId) => {
               const status = boardStatus(progress, levelId, boardId);
               const { x, y } = boardTilePosition(boardId);
@@ -323,7 +275,6 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
                   y={y}
                   locked={status === 'locked'}
                   completed={status === 'completed'}
-                  hasArtwork={Boolean(prepared?.previewSource)}
                 />
               );
             })}
@@ -341,10 +292,6 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
             {activeBoardId !== null && !showGameplay
               ? 'Locked - finish a neighbouring board to open it.'
               : 'Pinch in on a board to play it, out to see the whole picture.'}
-          </Text>
-          {/* Temporary diagnostic, see the debugInfo comment above - remove once confirmed. */}
-          <Text style={[styles.debugText, styles.textRight]} testID="board-wall-debug">
-            {debugInfo}
           </Text>
         </View>
       </View>
@@ -370,32 +317,23 @@ function BoardTile({
   y,
   locked,
   completed,
-  hasArtwork,
 }: {
   boardId: number;
   x: number;
   y: number;
   locked: boolean;
   completed: boolean;
-  hasArtwork: boolean;
 }) {
   return (
     <View
       testID={`board-tile-${boardId}`}
       style={[styles.tile, { left: x, top: y, width: BOARD_PX_X, height: BOARD_PX_Y }]}
     >
-      {hasArtwork ? (
-        <>
-          {/* The artwork itself is one shared Image behind every tile (see
-              above) - a locked tile used to also dim its own copy of the
-              image directly; this overlay alone reads as "locked" just as
-              well without needing a second, per-tile Image. */}
-          {locked && <View style={styles.tileLockOverlay} pointerEvents="none" />}
-          {completed && <View style={styles.tileCompletedBorder} pointerEvents="none" />}
-        </>
-      ) : (
-        <View style={[styles.tilePlaceholder, locked && styles.tilePlaceholderLocked]} />
-      )}
+      {/* The grid itself is `WallGridCanvas`, one shared Skia canvas behind
+          every tile - this View is only the border plus the lock/complete
+          overlay. */}
+      {locked && <View style={styles.tileLockOverlay} pointerEvents="none" />}
+      {completed && <View style={styles.tileCompletedBorder} pointerEvents="none" />}
     </View>
   );
 }
@@ -433,13 +371,6 @@ const styles = StyleSheet.create({
   // board becomes playable) must never resize `wallWrap`'s own flex layout,
   // since that would re-fire its `onLayout` and reclamp the player's zoom.
   adBar: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  // Temporary diagnostic text style, see the debugInfo comment above.
-  debugText: {
-    fontSize: 11,
-    color: colors.danger,
-    marginTop: 4,
-    fontVariant: ['tabular-nums'],
-  },
   tile: {
     position: 'absolute',
     // In wall-space units, not screen px: the wall's own fit-to-screen scale
@@ -452,7 +383,6 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(31, 41, 51, 0.25)',
     overflow: 'hidden',
   },
-  wallArtworkImage: { position: 'absolute', left: 0, top: 0 },
   tileLockOverlay: {
     position: 'absolute',
     top: 0,
@@ -470,10 +400,4 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: colors.completed,
   },
-  // Deliberately more saturated than colors.surface/locked: those read as
-  // near-identical to colors.background once the wall's fit-to-screen scale
-  // (~1/20) flattens out subtle tone differences, which is what made a level
-  // with no prepared artwork yet look like a blank white screen.
-  tilePlaceholder: { flex: 1, backgroundColor: '#E2E8F1' },
-  tilePlaceholderLocked: { backgroundColor: '#C9D3E0' },
 });
