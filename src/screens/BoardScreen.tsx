@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutChangeEvent, LayoutRectangle, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS, useSharedValue } from 'react-native-reanimated';
+import { Gesture } from 'react-native-gesture-handler';
+import { runOnJS, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useGameSounds } from '../audio/useGameSounds';
@@ -18,13 +18,6 @@ import { hasSeenOnboarding, markOnboardingSeen } from '../storage/onboarding';
 import { rotationPivotShift } from '../ui/airborneRotation';
 import { theme } from '../ui/theme';
 import { countAtX, shouldLift } from '../ui/trayGesture';
-import {
-  MAX_SCALE,
-  clampViewport,
-  fitViewport,
-  zoomAround,
-  type ViewportBounds,
-} from '../ui/viewport';
 
 /** Where the strip's *target* (the cell it would land on) sits relative to the finger. */
 const CARRY_OFFSET_Y = AIRBORNE_STONE * 1.7;
@@ -38,8 +31,25 @@ const CARRY_VISUAL_LIFT = AIRBORNE_STONE * 1.1;
 
 interface Props {
   board: BoardData;
-  /** Back to the levels screen. The board keeps its progress. */
-  onExit?: () => void;
+  /**
+   * This board's own top-left in the shared wall viewport's units (see
+   * `originX`/`originY` on `BoardCanvas`) - (0, 0) when the board is not part
+   * of a larger wall.
+   */
+  originX?: number;
+  originY?: number;
+  /**
+   * The viewport pan/zoom is driven from outside now (the unified board
+   * wall's own gesture, `UnifiedBoardScreen`) rather than owned locally, so
+   * entering and leaving a board is just panning/pinching across
+   * `PLAYABLE_SCALE` - one continuous gesture, no separate screen to swap to
+   * or a "Back" button to hunt for. Left unset, this screen falls back to a
+   * fixed, non-reactive viewport (no pan/zoom of its own) - fine for a test
+   * that only exercises the tray/drop logic, not a real standalone board.
+   */
+  translateX?: SharedValue<number>;
+  translateY?: SharedValue<number>;
+  scale?: SharedValue<number>;
   /** Fired once, the moment every cell of the board gets its stone. */
   onComplete?: () => void;
 }
@@ -47,14 +57,23 @@ interface Props {
 /**
  * The board screen.
  *
- * The board takes the whole screen above a thin HUD; the exit button and the
- * progress count float over it rather than taking a bar of their own.
+ * The board takes the whole screen above a thin HUD; the progress count
+ * floats over it rather than taking a bar of its own. Its own background is
+ * transparent outside the board's own drawn cells, so when it overlays the
+ * board wall (`UnifiedBoardScreen`), neighbouring boards still show through
+ * around the edges instead of being hidden behind a solid screen.
  *
- * Gesture split — one finger on the board pans it, two fingers pinch to zoom,
- * a swipe-and-pull on the tray lifts stones into the air, and the airborne
+ * Gesture split — the shared viewport handles panning/pinching (see above), a
+ * swipe-and-pull on the tray lifts stones into the air, and the airborne
  * stones carry their own drag and tap. Placing never fights with moving.
  */
-export function BoardScreen({ board, onExit, onComplete }: Props) {
+export function BoardScreen({ board, originX = 0, originY = 0, translateX, translateY, scale, onComplete }: Props) {
+  const ownTranslateX = useSharedValue(0);
+  const ownTranslateY = useSharedValue(0);
+  const ownScale = useSharedValue(1);
+  const viewportTranslateX = translateX ?? ownTranslateX;
+  const viewportTranslateY = translateY ?? ownTranslateY;
+  const viewportScale = scale ?? ownScale;
   const { session, revision, ready } = useBoardSession(board);
   const sounds = useGameSounds();
 
@@ -119,9 +138,6 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
   /** Orientation the next lift uses, carried over from the last rotation. */
   const orientation = useRef<Orientation>('horizontal');
 
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const scale = useSharedValue(1);
   /** Screen position of the airborne strip's head. */
   const stripX = useSharedValue(0);
   const stripY = useSharedValue(0);
@@ -138,49 +154,20 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
   const carryOffsetY = CARRY_OFFSET_Y;
   const carryVisualLift = CARRY_VISUAL_LIFT;
 
-  const bounds = useMemo<ViewportBounds>(
-    () => ({
-      canvasWidth: canvasSize.width,
-      canvasHeight: canvasSize.height,
-      boardWidth: board.width * CELL,
-      boardHeight: board.height * CELL,
-    }),
-    [canvasSize, board.width, board.height]
-  );
-
   const selection = session.traySelection;
   const airborne = session.airborneStrip;
   const trayEntry = selection ? board.palette[selection.color] : null;
   const airborneEntry = airborne ? board.palette[airborne.color] : null;
 
-  const onCanvasLayout = useCallback(
-    (event: LayoutChangeEvent) => {
-      const { width, height } = event.nativeEvent.layout;
-      setCanvasSize({ width, height });
-      // Not every renderer implements measureInWindow; without it the origin
-      // stays at zero, which only matters for a real drag.
-      canvasRef.current?.measureInWindow?.((x, y) => {
-        canvasOrigin.current = { x, y };
-      });
-      const whole = fitViewport({
-        canvasWidth: width,
-        canvasHeight: height,
-        boardWidth: board.width * CELL,
-        boardHeight: board.height * CELL,
-      });
-      // Start zoomed in enough to read the numbers, centred on the board.
-      const start = zoomAround(whole, width / 2, height / 2, Math.min(MAX_SCALE, whole.scale * 2.2), {
-        canvasWidth: width,
-        canvasHeight: height,
-        boardWidth: board.width * CELL,
-        boardHeight: board.height * CELL,
-      });
-      translateX.value = start.translateX;
-      translateY.value = start.translateY;
-      scale.value = start.scale;
-    },
-    [board.width, board.height, scale, translateX, translateY]
-  );
+  const onCanvasLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setCanvasSize({ width, height });
+    // Not every renderer implements measureInWindow; without it the origin
+    // stays at zero, which only matters for a real drag.
+    canvasRef.current?.measureInWindow?.((x, y) => {
+      canvasOrigin.current = { x, y };
+    });
+  }, []);
 
   /** Cell the strip's head sits over, from the head's own screen position. */
   const headAt = useCallback(
@@ -190,15 +177,18 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
         strip: session.airborneStrip,
         canvasOrigin: canvasOrigin.current,
         canvasSize,
+        // Shifted into this board's own local frame: the shared viewport's
+        // translate is in the same wall-space every board (and, when there is
+        // no wall, this board alone) shares, offset by (0, 0) either way.
         viewport: {
-          translateX: translateX.value,
-          translateY: translateY.value,
-          scale: scale.value,
+          translateX: viewportTranslateX.value + originX * viewportScale.value,
+          translateY: viewportTranslateY.value + originY * viewportScale.value,
+          scale: viewportScale.value,
         },
         cellSize: CELL,
         fingerOffsetCells: 0,
       }),
-    [session, board, canvasSize, translateX, translateY, scale]
+    [session, board, canvasSize, viewportTranslateX, viewportTranslateY, viewportScale, originX, originY]
   );
 
   const updatePreview = useCallback(
@@ -363,38 +353,6 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
     return Gesture.Exclusive(drag, tap);
   }, [carryVisualLift, commitDrop, rotateStones, stripX, stripY, updatePreview]);
 
-  const viewportGesture = useMemo(() => {
-    const pan = Gesture.Pan()
-      .averageTouches(true)
-      .onChange((event) => {
-        const next = clampViewport(
-          {
-            translateX: translateX.value + event.changeX,
-            translateY: translateY.value + event.changeY,
-            scale: scale.value,
-          },
-          bounds
-        );
-        translateX.value = next.translateX;
-        translateY.value = next.translateY;
-      });
-
-    const pinch = Gesture.Pinch().onChange((event) => {
-      const next = zoomAround(
-        { translateX: translateX.value, translateY: translateY.value, scale: scale.value },
-        event.focalX,
-        event.focalY,
-        scale.value * event.scaleChange,
-        bounds
-      );
-      translateX.value = next.translateX;
-      translateY.value = next.translateY;
-      scale.value = next.scale;
-    });
-
-    return Gesture.Simultaneous(pan, pinch);
-  }, [bounds, scale, translateX, translateY]);
-
   const handleSelectColor = useCallback(
     (color: number) => {
       session.selectColor(color);
@@ -409,38 +367,34 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
     <View style={styles.screen}>
       <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
         <View style={styles.boardArea}>
-          <GestureDetector gesture={viewportGesture}>
-            <View
-              ref={canvasRef}
-              testID="board-surface"
-              style={styles.canvasWrap}
-              onLayout={onCanvasLayout}
-            >
-              {canvasSize.width > 0 ? (
-                <BoardCanvas
-                  session={session}
-                  revision={revision}
-                  preview={preview}
-                  width={canvasSize.width}
-                  height={canvasSize.height}
-                  translateX={translateX}
-                  translateY={translateY}
-                  scale={scale}
-                  showSolution={DEV_TOOLS_ENABLED && showSolution}
-                />
-              ) : null}
-            </View>
-          </GestureDetector>
-
-          <Pressable
-            onPress={onExit}
-            accessibilityRole="button"
-            accessibilityLabel="Back to levels"
-            testID="exit-board"
-            style={styles.exit}
+          {/* No gesture of its own any more (see the viewport comment above) -
+              `pointerEvents="none"` keeps it from ever competing for the
+              touch that the board wall's own pan/pinch gesture, underneath
+              this whole screen, needs to keep receiving. */}
+          <View
+            ref={canvasRef}
+            testID="board-surface"
+            style={styles.canvasWrap}
+            onLayout={onCanvasLayout}
+            pointerEvents="none"
           >
-            <Text style={styles.exitLabel}>Back</Text>
-          </Pressable>
+            {canvasSize.width > 0 ? (
+              <BoardCanvas
+                session={session}
+                revision={revision}
+                preview={preview}
+                width={canvasSize.width}
+                height={canvasSize.height}
+                translateX={viewportTranslateX}
+                translateY={viewportTranslateY}
+                scale={viewportScale}
+                originX={originX}
+                originY={originY}
+                showSolution={DEV_TOOLS_ENABLED && showSolution}
+              />
+            ) : null}
+          </View>
+
           <Text style={styles.progress} testID="board-progress">
             {session.stonesPlaced} / {session.stonesTotal}
           </Text>
@@ -528,9 +482,13 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
 }
 
 const styles = StyleSheet.create({
+  // Transparent, not `theme.appBackground`: mounted over the board wall
+  // (`UnifiedBoardScreen`), this screen only actually draws pixels within
+  // this board's own cells (via the Skia canvas below); everywhere else
+  // needs to stay see-through so neighbouring boards show through around the
+  // edges instead of being hidden behind a solid screen.
   screen: {
     flex: 1,
-    backgroundColor: theme.appBackground,
   },
   boardArea: {
     flex: 1,
@@ -538,7 +496,6 @@ const styles = StyleSheet.create({
   canvasWrap: {
     flex: 1,
     overflow: 'hidden',
-    backgroundColor: theme.boardBackground,
   },
   loading: {
     position: 'absolute',
@@ -548,21 +505,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: theme.appBackground,
     opacity: 0.7,
-  },
-  exit: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: theme.panel,
-    borderWidth: 1,
-    borderColor: theme.panelBorder,
-  },
-  exitLabel: {
-    color: theme.text,
-    fontWeight: '600',
   },
   progress: {
     position: 'absolute',

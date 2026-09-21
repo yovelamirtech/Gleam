@@ -37,9 +37,13 @@ const board = makeBoard(['000000', '111111'], 'level-1/board-test');
 /**
  * Render, give the board surface a size (nothing lays out on its own in the
  * test renderer), and wait for stored progress to load as the screen does.
+ * The viewport is left unset - BoardScreen falls back to a fixed one now
+ * that panning/zooming is driven by whatever wall hosts it - which is fine
+ * here since none of these tests drop a strip successfully inside the canvas
+ * bounds (only outside them, which does not depend on the viewport at all).
  */
-async function renderBoard(onExit: () => void = jest.fn()) {
-  const utils = render(<BoardScreen board={board} onExit={onExit} />);
+async function renderBoard() {
+  const utils = render(<BoardScreen board={board} />);
   fireEvent(screen.getByTestId('board-surface'), 'layout', {
     nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 600 } },
   });
@@ -96,21 +100,13 @@ describe('BoardScreen', () => {
     expect(screen.getByTestId('board-progress')).toHaveTextContent('0 / 12');
   });
 
-  it('offers a way back out of the board mid-game', async () => {
-    const onExit = jest.fn();
-    await renderBoard(onExit);
-    fireEvent.press(screen.getByTestId('exit-board'));
-    expect(onExit).toHaveBeenCalled();
-  });
-
   it('hands the board every pixel the surface has', async () => {
     await renderBoard();
-    // The canvas takes the measured surface whole; the exit button and the
-    // progress count float over it instead of taking a bar of their own.
+    // The canvas takes the measured surface whole; the progress count floats
+    // over it instead of taking a bar of its own.
     const canvas = screen.getByTestId('board-canvas');
     expect(canvas.props.width).toBe(390);
     expect(canvas.props.height).toBe(600);
-    expect(screen.getByTestId('exit-board')).toBeTruthy();
   });
 });
 

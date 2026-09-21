@@ -675,6 +675,88 @@ through together once a device is available rather than repeating
     device** - a debug readout (`testID="board-wall-debug"` on
     `UnifiedBoardScreen`) is still in place pending that confirmation.
 
+20. **Item 19's fix confirmed working on device, plus three more
+    on-device-only bugs** found once the wall was actually visible and
+    playable for the first time:
+    - The board wall's zoom reset itself back to the fit view the instant a
+      board became playable. Cause: the banner ad below the wall
+      unmounts at that moment, and it was a normal flex sibling of the
+      wall's own `View` rather than `position:'absolute'` like the header,
+      so its unmount resized `wallWrap`'s flex layout and re-fired its
+      `onLayout`, which unconditionally reset the viewport to
+      `fitViewport`. Fixed by making the ad bar absolute (so it never
+      affects the wall's own layout) and by only having `onLayout` set the
+      *initial* viewport once, reclamping (not resetting) on any later
+      resize.
+    - The app's own settings gear was moved from the top-right to the
+      top-left on both wall screens - a real device's Expo Go build shows
+      its own floating dev-menu bubble in that same top-right corner,
+      covering ours there.
+    - `numberFont` (`src/ui/font.ts`) looked up the device's default
+      typeface via `Skia.FontMgr.System().matchFamilyStyle('', {})` - an
+      empty family name that either throws or matches nothing on a real
+      device, silently caught into `null`, which blanks every number on a
+      board (`BoardCanvas`'s grid-drawing skips a cell's number whenever the
+      font is `null`). Never caught by any test, since RN Testing Library
+      never touches a real font manager. Fixed by using Skia's own built-in
+      default typeface (`Skia.Font(undefined, size)`) instead, which needs
+      no OS font lookup at all.
+
+21. **The board wall now draws every board's real, empty grid (cell
+    backgrounds, borders, numbers) instead of a flattened preview-artwork
+    image** - requested once the wall was actually visible: the numbers are
+    what a player needs to plan a drop, and the mosaic image told them
+    nothing useful. `BoardCanvas`'s own grid-drawing was extracted into a
+    shared `drawBoardGrid` helper (`src/ui/boardGrid.ts`), now used both by
+    `BoardCanvas` (one board) and a new `WallGridCanvas` component
+    (`src/components/WallGridCanvas.tsx`) that bakes all 48 of a level's
+    boards into one Skia picture. The wall's shared artwork `Image` and the
+    per-tile "no artwork" placeholder styling are gone; every board
+    (prepared or not) renders its real grid now, via the same
+    `createPlaceholderBoard` fallback the live board screen already used.
+
+22. **Unified the board wall and the live board screen into one continuous
+    viewport** (this is most of the "fullest reading" of item 8 that item
+    16 had scoped down): `UnifiedBoardScreen`'s own pan/pinch gesture is now
+    the *only* thing that ever drives pan/zoom, all the way from the whole
+    wall down to a single board's stones and back - there is no more
+    separate `BoardScreen`-owned viewport, no full-screen hand-off, and no
+    "Back" button. `BoardScreen` now takes its `translateX`/`translateY`/
+    `scale` as props (shared values owned by `UnifiedBoardScreen`) plus an
+    `originX`/`originY` (that board's own top-left in the same wall-space
+    units), and `BoardCanvas` gained matching `originX`/`originY` props so
+    it can draw a board anywhere inside a larger shared canvas instead of
+    always at its own local `(0, 0)`. Leaving a board is now just
+    continuing the same pinch gesture out past `PLAYABLE_SCALE` - the
+    existing `activeBoardId`/`showGameplay` logic already dropped back to
+    `null` on its own once scale crossed that line, so exiting "just
+    worked" once the two viewports became one.
+
+    `BoardScreen`'s own background is now transparent everywhere it isn't
+    actually drawing this board's cells (`styles.screen`/`canvasWrap` lost
+    their `backgroundColor`), so when it overlays the wall, neighbouring
+    boards' tiles (grid, borders, lock/complete overlays - all from
+    `UnifiedBoardScreen`/`WallGridCanvas`) show through around the edges
+    instead of being hidden behind a solid screen - this is the "see a bit
+    of the neighbouring board" ask. `BoardScreen`'s own canvas View is
+    `pointerEvents="none"` so it never competes with the wall's gesture for
+    the pan/pinch touch underneath it.
+
+    **Known limitation, not yet addressed**: only the *active* (centred)
+    board has a live `BoardSession` - a neighbour's own grid/numbers always
+    show (via `WallGridCanvas`, unaffected by any session), but a
+    neighbour's *already-placed stones* only render once panning far enough
+    makes it the active board itself (each board keeps its own independent
+    stone economy - "exact supply per board" - so a strip lifted from one
+    board's tray was deliberately kept from being droppable onto a
+    different board's cells; the coherent way to read "already interactive"
+    was "no hard scene swap, tray follows you continuously" rather than
+    literally sharing one strip's stones across two boards' separate
+    supplies). **Not yet confirmed on a real device** - the touch
+    hand-off between the wall's own `GestureDetector` and `BoardScreen`'s
+    now-gestureless canvas area is the highest-risk part of this change and
+    needs on-device confirmation before it can be trusted.
+
 ## Next up
 
 **Start with item 8 below** (the board-level half of the unified wall) —

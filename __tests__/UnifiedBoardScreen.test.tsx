@@ -1,5 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import React from 'react';
+import { State } from 'react-native-gesture-handler';
+import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { BOARDS_PER_LEVEL } from '../src/constants/board';
@@ -96,12 +98,23 @@ describe('UnifiedBoardScreen', () => {
     expect(screen.queryByTestId('active-board-overlay')).toBeNull();
   });
 
-  it('exiting the active board zooms back out to the wall instead of leaving the level', async () => {
+  it('leaving via a pinch-out crosses back below PLAYABLE_SCALE instead of a Back button', async () => {
     await renderWall({ levelId: UNPREPARED_LEVEL_ID, boardId: 28 });
     await waitFor(() => expect(screen.getByTestId('active-board-overlay')).toBeTruthy());
     await waitFor(() => expect(screen.queryByTestId('board-loading')).toBeNull());
 
-    fireEvent.press(screen.getByTestId('exit-board'));
+    // There is no exit button any more - leaving a board is just continuing
+    // the same pinch gesture the wall itself uses, out past the point where
+    // the board reads as playable. scaleChange this small (from the boardId
+    // shortcut's starting scale of 1) lands well under PLAYABLE_SCALE (0.5).
+    await act(async () => {
+      fireGestureHandler(getByGestureTestId('board-wall-pinch'), [
+        { state: State.BEGAN, focalX: 195, focalY: 400, scale: 1 },
+        { state: State.ACTIVE, focalX: 195, focalY: 400, scale: 1 },
+        { state: State.ACTIVE, focalX: 195, focalY: 400, scale: 0.01 },
+        { state: State.END, focalX: 195, focalY: 400, scale: 0.01 },
+      ]);
+    });
 
     await waitFor(() => expect(screen.queryByTestId('active-board-overlay')).toBeNull());
     expect(navigation.goBack).not.toHaveBeenCalled();
