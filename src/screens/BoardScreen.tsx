@@ -21,7 +21,6 @@ import { countAtX, shouldLift } from '../ui/trayGesture';
 import {
   MAX_SCALE,
   clampViewport,
-  fitScale,
   fitViewport,
   zoomAround,
   type ViewportBounds,
@@ -113,12 +112,6 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
   const [showSolution, setShowSolution] = useState(false);
 
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
-  // Temporary on-screen diagnostic: a report of "can zoom in but not back
-  // out" on a real device needs the actual scale numbers to tell a stuck
-  // gesture apart from a legitimate floor (`clampViewport`'s min is
-  // `fitScale` - the whole board just visible - which is a real limit, not a
-  // bug). Remove once the real cause is confirmed.
-  const [debugScale, setDebugScale] = useState('layout pending');
   const canvasRef = useRef<View>(null);
   /** Where the canvas sits on screen, so a strip position can find its cell. */
   const canvasOrigin = useRef({ x: 0, y: 0 });
@@ -185,9 +178,6 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
       translateX.value = start.translateX;
       translateY.value = start.translateY;
       scale.value = start.scale;
-      setDebugScale(
-        `fit ${whole.scale.toFixed(3)} start ${start.scale.toFixed(3)} min ${whole.scale.toFixed(3)} max ${MAX_SCALE}`
-      );
     },
     [board.width, board.height, scale, translateX, translateY]
   );
@@ -400,9 +390,6 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
       translateX.value = next.translateX;
       translateY.value = next.translateY;
       scale.value = next.scale;
-      runOnJS(setDebugScale)(
-        `scale ${next.scale.toFixed(3)} change ${event.scaleChange.toFixed(3)} min ${fitScale(bounds).toFixed(3)} max ${MAX_SCALE}`
-      );
     });
 
     return Gesture.Simultaneous(pan, pinch);
@@ -456,10 +443,6 @@ export function BoardScreen({ board, onExit, onComplete }: Props) {
           </Pressable>
           <Text style={styles.progress} testID="board-progress">
             {session.stonesPlaced} / {session.stonesTotal}
-          </Text>
-          {/* Temporary diagnostic, see the debugScale comment above - remove once confirmed. */}
-          <Text style={styles.debugText} testID="board-debug-scale">
-            {debugScale}
           </Text>
           {session.isComplete() ? (
             <View style={styles.completeBanner} testID="board-complete">
@@ -586,15 +569,6 @@ const styles = StyleSheet.create({
     top: 16,
     right: 14,
     color: theme.textMuted,
-    fontVariant: ['tabular-nums'],
-  },
-  // Temporary diagnostic text style, see the debugScale comment above.
-  debugText: {
-    position: 'absolute',
-    top: 40,
-    right: 14,
-    fontSize: 11,
-    color: theme.negative,
     fontVariant: ['tabular-nums'],
   },
   completeBanner: {
