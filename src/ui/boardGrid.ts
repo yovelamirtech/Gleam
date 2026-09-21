@@ -4,7 +4,6 @@ import { CELL } from '../constants/board';
 import type { BoardData } from '../game/types';
 import { strokePaint } from './drawStone';
 import { numberFont } from './font';
-import { lastGridDrawStats } from './gridDrawStats';
 import { theme } from './theme';
 
 /**
@@ -27,8 +26,6 @@ export function drawBoardGrid(canvas: SkCanvas, board: BoardData, originX: numbe
   label.setAntiAlias(true);
   label.setColor(Skia.Color(theme.cellNumber));
   const font = numberFont(CELL * 0.5);
-  lastGridDrawStats.fontMissing = !font;
-  lastGridDrawStats.drawTextError = null;
 
   for (let row = 0; row < board.height; row += 1) {
     for (let col = 0; col < board.width; col += 1) {
@@ -40,16 +37,8 @@ export function drawBoardGrid(canvas: SkCanvas, board: BoardData, originX: numbe
       if (!font) continue;
       // A cell shows its number only, never its colour.
       const text = String(board.palette[board.cells[row * board.width + col]].number);
-      try {
-        const textWidth = font.getTextWidth(text);
-        canvas.drawText(text, x + (CELL - textWidth) / 2, y + CELL * 0.68, label, font);
-      } catch (error) {
-        // Keep drawing the rest of the grid even if one cell's number fails -
-        // and remember the first failure so it can be reported on screen.
-        if (!lastGridDrawStats.drawTextError) {
-          lastGridDrawStats.drawTextError = error instanceof Error ? error.message : String(error);
-        }
-      }
+      const textWidth = font.getTextWidth(text);
+      canvas.drawText(text, x + (CELL - textWidth) / 2, y + CELL * 0.68, label, font);
     }
   }
 }

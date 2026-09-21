@@ -10,8 +10,6 @@ import { BannerAdBox } from '../ads/BannerAdBox';
 import SettingsButton from '../components/SettingsButton';
 import { WallGridCanvas } from '../components/WallGridCanvas';
 import { BOARDS_PER_LEVEL } from '../constants/board';
-import { DEV_TOOLS_ENABLED } from '../constants/devTools';
-import { lastGridDrawStats } from '../ui/gridDrawStats';
 import { preparedLevelFor } from '../game/levels';
 import { createPlaceholderBoard } from '../game/placeholderBoard';
 import type { BoardData } from '../game/types';
@@ -69,10 +67,6 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
   const [progress, setProgress] = useState<Progress>(initialProgress);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [activeBoardId, setActiveBoardId] = useState<number | null>(null);
-  // Screenshot-able debug line for the Phase B viewport hand-off - remove
-  // once the touch-passthrough/peek-at-neighbour behaviour is confirmed on
-  // a real device. Only ever shown when DEV_TOOLS_ENABLED.
-  const [debugSnapshot, setDebugSnapshot] = useState('');
   const insets = useSafeAreaInsets();
   const prepared = preparedLevelFor(levelId);
 
@@ -106,12 +100,6 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
       ? centreBoardAt(viewport, canvasSize.width, canvasSize.height)
       : null;
     setActiveBoardId((current) => (current === centre ? current : centre));
-    if (DEV_TOOLS_ENABLED) {
-      setDebugSnapshot(
-        `scale=${viewport.scale.toFixed(3)} tx=${viewport.translateX.toFixed(0)} ty=${viewport.translateY.toFixed(0)} ` +
-          `playable=${isPlayableScale(viewport.scale)} centre=${centre ?? '-'}`
-      );
-    }
   }, [canvasSize.width, canvasSize.height, scale, translateX, translateY]);
 
   const onLayout = useCallback(
@@ -314,20 +302,6 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
           />
         </View>
       ) : null}
-
-      {DEV_TOOLS_ENABLED ? (
-        <View
-          style={[styles.debugBar, { paddingBottom: insets.bottom + 4 }]}
-          pointerEvents="none"
-          testID="unified-board-debug"
-        >
-          <Text style={styles.debugText}>
-            activeBoardId={activeBoardId ?? '-'} showGameplay={String(showGameplay)} {debugSnapshot}{'\n'}
-            fontMissing={String(lastGridDrawStats.fontMissing)} drawTextError=
-            {lastGridDrawStats.drawTextError ?? '-'}
-          </Text>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -392,16 +366,6 @@ const styles = StyleSheet.create({
   // board becomes playable) must never resize `wallWrap`'s own flex layout,
   // since that would re-fire its `onLayout` and reclamp the player's zoom.
   adBar: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  debugBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 8,
-    paddingTop: 4,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  debugText: { color: '#0f0', fontSize: 11, fontFamily: 'monospace' },
   tile: {
     position: 'absolute',
     // In wall-space units, not screen px: the wall's own fit-to-screen scale
