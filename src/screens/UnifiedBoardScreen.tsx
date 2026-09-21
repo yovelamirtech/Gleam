@@ -180,19 +180,21 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
         runOnJS(updateActiveBoard)();
       });
 
-    const pinch = Gesture.Pinch().onChange((event) => {
-      const next = zoomAround(
-        { translateX: translateX.value, translateY: translateY.value, scale: scale.value },
-        event.focalX,
-        event.focalY,
-        scale.value * event.scaleChange,
-        bounds
-      );
-      translateX.value = next.translateX;
-      translateY.value = next.translateY;
-      scale.value = next.scale;
-      runOnJS(updateActiveBoard)();
-    });
+    const pinch = Gesture.Pinch()
+      .withTestId('board-wall-pinch')
+      .onChange((event) => {
+        const next = zoomAround(
+          { translateX: translateX.value, translateY: translateY.value, scale: scale.value },
+          event.focalX,
+          event.focalY,
+          scale.value * event.scaleChange,
+          bounds
+        );
+        translateX.value = next.translateX;
+        translateY.value = next.translateY;
+        scale.value = next.scale;
+        runOnJS(updateActiveBoard)();
+      });
 
     return Gesture.Simultaneous(pan, pinch);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -211,21 +213,6 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
       ? prepared.getBoard(activeBoardId)
       : createPlaceholderBoard(activeBoardId, { levelId: `level-${levelId + 1}` });
   }, [activeBoardId, prepared, levelId]);
-
-  /** Zoom back out to the whole wall - leaving a board never leaves the level. */
-  const zoomToWall = useCallback(() => {
-    if (canvasSize.width === 0) return;
-    const whole = fitViewport({
-      canvasWidth: canvasSize.width,
-      canvasHeight: canvasSize.height,
-      boardWidth: WALL_PX_WIDTH,
-      boardHeight: WALL_PX_HEIGHT,
-    });
-    translateX.value = whole.translateX;
-    translateY.value = whole.translateY;
-    scale.value = whole.scale;
-    setActiveBoardId(null);
-  }, [canvasSize, scale, translateX, translateY]);
 
   const handleComplete = useCallback(() => {
     if (activeBoardId === null) return;
@@ -302,9 +289,17 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
         </View>
       ) : null}
 
-      {showGameplay && activeBoard ? (
-        <View style={StyleSheet.absoluteFill} testID="active-board-overlay">
-          <BoardScreen board={activeBoard} onExit={zoomToWall} onComplete={handleComplete} />
+      {showGameplay && activeBoard && activeBoardId !== null ? (
+        <View style={StyleSheet.absoluteFill} pointerEvents="box-none" testID="active-board-overlay">
+          <BoardScreen
+            board={activeBoard}
+            originX={boardTilePosition(activeBoardId).x}
+            originY={boardTilePosition(activeBoardId).y}
+            translateX={translateX}
+            translateY={translateY}
+            scale={scale}
+            onComplete={handleComplete}
+          />
         </View>
       ) : null}
     </View>

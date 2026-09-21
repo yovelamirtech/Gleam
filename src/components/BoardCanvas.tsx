@@ -41,6 +41,13 @@ interface Props {
   translateX: SharedValue<number>;
   translateY: SharedValue<number>;
   scale: SharedValue<number>;
+  /**
+   * This board's own top-left, in the same units as `translateX`/`translateY`
+   * - lets several boards share one continuous viewport (the unified board
+   * wall, HANDOFF.md item 8) instead of each owning its own local one.
+   */
+  originX?: number;
+  originY?: number;
   /** Dev tool: a small swatch of the true colour in every still-empty cell. */
   showSolution?: boolean;
 }
@@ -63,6 +70,8 @@ export function BoardCanvas({
   translateX,
   translateY,
   scale,
+  originX = 0,
+  originY = 0,
   showSolution = false,
 }: Props) {
   const board = session.board;
@@ -162,8 +171,8 @@ export function BoardCanvas({
   }, [preview, board]);
 
   const transform = useDerivedValue(() => [
-    { translateX: translateX.value },
-    { translateY: translateY.value },
+    { translateX: translateX.value + originX * scale.value },
+    { translateY: translateY.value + originY * scale.value },
     { scale: scale.value },
   ]);
 
