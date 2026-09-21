@@ -389,36 +389,44 @@ export function BoardScreen({ board, originX = 0, originY = 0, translateX, trans
     // (canvas is already 'none', tray/color-picker/dev button are not) isn't
     // actually there to claim the touch.
     <View style={styles.screen} pointerEvents="box-none">
+      {/* Pinned straight to this screen's own (0,0), not inside the
+          SafeAreaView below: the unified board wall's own canvas
+          (`UnifiedBoardScreen`'s `wallWrap`) is never inset for the notch or
+          home indicator, so it and this board share the exact same
+          translateX/translateY/scale meaning only if this canvas starts at
+          the same unshifted origin. A `SafeAreaView`'s top/bottom padding
+          here would shift every stone down by the safe-area inset relative
+          to the wall's grid the moment this screen took over from it -
+          exactly the seam visible right at the PLAYABLE_SCALE crossing. The
+          HUD below (tray, colour picker, progress, dev tools) still wants
+          the safe-area padding, so only the canvas itself moves out. */}
+      <View
+        ref={canvasRef}
+        testID="board-surface"
+        style={StyleSheet.absoluteFill}
+        onLayout={onCanvasLayout}
+        pointerEvents="none"
+      >
+        {canvasSize.width > 0 ? (
+          <BoardCanvas
+            session={session}
+            revision={revision}
+            preview={preview}
+            width={canvasSize.width}
+            height={canvasSize.height}
+            translateX={viewportTranslateX}
+            translateY={viewportTranslateY}
+            scale={viewportScale}
+            originX={originX}
+            originY={originY}
+            showSolution={DEV_TOOLS_ENABLED && showSolution}
+          />
+        ) : null}
+      </View>
+      {!ready ? <View style={styles.loading} testID="board-loading" pointerEvents="none" /> : null}
+
       <SafeAreaView style={styles.screen} edges={['top', 'bottom']} pointerEvents="box-none">
         <View style={styles.boardArea} pointerEvents="box-none">
-          {/* No gesture of its own any more (see the viewport comment above) -
-              `pointerEvents="none"` keeps it from ever competing for the
-              touch that the board wall's own pan/pinch gesture, underneath
-              this whole screen, needs to keep receiving. */}
-          <View
-            ref={canvasRef}
-            testID="board-surface"
-            style={styles.canvasWrap}
-            onLayout={onCanvasLayout}
-            pointerEvents="none"
-          >
-            {canvasSize.width > 0 ? (
-              <BoardCanvas
-                session={session}
-                revision={revision}
-                preview={preview}
-                width={canvasSize.width}
-                height={canvasSize.height}
-                translateX={viewportTranslateX}
-                translateY={viewportTranslateY}
-                scale={viewportScale}
-                originX={originX}
-                originY={originY}
-                showSolution={DEV_TOOLS_ENABLED && showSolution}
-              />
-            ) : null}
-          </View>
-
           <Text style={styles.progress} testID="board-progress">
             {session.stonesPlaced} / {session.stonesTotal}
           </Text>
@@ -427,7 +435,6 @@ export function BoardScreen({ board, originX = 0, originY = 0, translateX, trans
               <Text style={styles.completeText}>Board complete</Text>
             </View>
           ) : null}
-          {!ready ? <View style={styles.loading} testID="board-loading" /> : null}
 
           {DEV_TOOLS_ENABLED ? (
             <>
@@ -516,10 +523,6 @@ const styles = StyleSheet.create({
   },
   boardArea: {
     flex: 1,
-  },
-  canvasWrap: {
-    flex: 1,
-    overflow: 'hidden',
   },
   loading: {
     position: 'absolute',
