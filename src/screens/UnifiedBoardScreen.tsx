@@ -11,6 +11,7 @@ import SettingsButton from '../components/SettingsButton';
 import { WallGridCanvas } from '../components/WallGridCanvas';
 import { BOARDS_PER_LEVEL } from '../constants/board';
 import { DEV_TOOLS_ENABLED } from '../constants/devTools';
+import { lastGridDrawStats } from '../ui/gridDrawStats';
 import { preparedLevelFor } from '../game/levels';
 import { createPlaceholderBoard } from '../game/placeholderBoard';
 import type { BoardData } from '../game/types';
@@ -321,7 +322,9 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
           testID="unified-board-debug"
         >
           <Text style={styles.debugText}>
-            activeBoardId={activeBoardId ?? '-'} showGameplay={String(showGameplay)} {debugSnapshot}
+            activeBoardId={activeBoardId ?? '-'} showGameplay={String(showGameplay)} {debugSnapshot}{'\n'}
+            fontMissing={String(lastGridDrawStats.fontMissing)} drawTextError=
+            {lastGridDrawStats.drawTextError ?? '-'}
           </Text>
         </View>
       ) : null}
