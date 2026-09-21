@@ -19,6 +19,7 @@ import { initialProgress, loadProgress, type Progress } from '../storage/progres
 import { colors } from '../theme/colors';
 import {
   LEVEL_TILE,
+  LEVEL_TILE_GAP,
   WALL_HEIGHT,
   WALL_WIDTH,
   levelAtPoint,
@@ -208,7 +209,15 @@ function LevelTile({
   return (
     <View
       testID={`level-tile-${levelId}`}
-      style={[styles.tile, { left: x, top: y, width: LEVEL_TILE, height: LEVEL_TILE }]}
+      style={[
+        styles.tile,
+        {
+          left: x + LEVEL_TILE_GAP / 2,
+          top: y + LEVEL_TILE_GAP / 2,
+          width: LEVEL_TILE - LEVEL_TILE_GAP,
+          height: LEVEL_TILE - LEVEL_TILE_GAP,
+        },
+      ]}
     >
       {previewSource ? (
         <ImageBackground
