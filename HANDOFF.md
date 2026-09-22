@@ -757,6 +757,131 @@ through together once a device is available rather than repeating
     now-gestureless canvas area is the highest-risk part of this change and
     needs on-device confirmation before it can be trusted.
 
+23. **Pinch-zoom got stuck exactly at `PLAYABLE_SCALE` when entering a
+    board**, found by the user on-device right after item 22 shipped (PR
+    #29). Root cause: item 22 made `BoardScreen`'s canvas a `pointerEvents`
+    -unset (so default `'auto'`) sibling `View` overlaying the wall's own
+    `GestureDetector` - a plain `View` still claims hit-testing for any
+    touch that lands on it even with no gesture attached, and RNGH's native
+    recognizer only receives touches whose hit-tested view is inside its
+    own subtree, so the wall's pinch/pan simply never saw touches that
+    landed on `BoardScreen`'s wrapper views once it was overlaid. Fixed by
+    adding `pointerEvents="box-none"` to `BoardScreen`'s outer `screen`
+    View, its `SafeAreaView`, and `boardArea` - all views with no real
+    interactive content of their own, so hit-testing "sees through" them to
+    the wall's `GestureDetector` underneath. **No explicit re-confirmation
+    from the user afterward** (they moved on to reporting other bugs
+    instead of the freeze), but nothing about it has come up again since -
+    treat as likely fixed, not a clean confirmed-on-device tick.
+
+24. **Cell numbers were completely invisible on a real device** (a blank
+    white grid, no numbers anywhere), needing two fix attempts to actually
+    resolve (PRs #30-#33). First root cause, found by reading Skia's own
+    native C++ source (`node_modules/@shopify/react-native-skia/cpp/api/JsiSkFont.h`):
+    `Skia.Font(undefined, size)` (`src/ui/font.ts`'s old fix from item 20)
+    passes two JS arguments, and the native constructor branches purely on
+    *argument count*, not value - with two arguments it always tries to
+    extract a typeface from the first one, and `undefined` makes that throw
+    on a real device (never caught by any test, since RN Testing Library's
+    Skia mock never touches the real native binding). Fixing that
+    (`Skia.Font()`, zero arguments, PR #31) stopped the crash but the
+    numbers were *still* invisible - because a zero-typeface `SkFont`
+    renders zero glyphs with no error at all, not even a caught exception.
+    The real fix (PR #32): `matchFont({ fontSize: size })`, which resolves
+    a genuine platform typeface through Skia's real font manager (and
+    react-native-skia's own `"System"` -> real-font alias resolution -
+    `JsiSkFontMgr.h`'s `resolveFontFamily`), so it always has actual
+    glyphs to draw. A temporary debug overlay (`lastGridDrawStats` in
+    `src/ui/gridDrawStats.ts`, a debug bar on `UnifiedBoardScreen`) was
+    added to diagnose this live from the user's screenshots and fully
+    removed again once fixed (PR #33) - if either of those turn up again
+    anywhere, they're leftover diagnostic code that should have been
+    deleted, not intentional. **Confirmed working on device** - the user
+    saw the numbers render correctly ("עובד") before asking for the debug
+    bar removed.
+
+25. **The solve sound (and `onComplete`) replayed every single time an
+    already-solved board was re-opened** by zooming back into it (PR #34),
+    found by the user on-device. Root cause: `UnifiedBoardScreen` fully
+    unmounts/remounts `BoardScreen` on every `PLAYABLE_SCALE` crossing by
+    design (item 16), so `useBoardSession`'s async
+    `loadBoardProgress`/`restoreProgress` reruns from scratch on every
+    re-entry, and the old completion-detection effect couldn't tell "stored
+    progress just finished loading and it happens to already be complete"
+    apart from "a placement just now finished the board." Fixed in
+    `BoardScreen.tsx` with a `hydratedRef` guard: the first time stored
+    progress finishes loading for a board, its complete/incomplete state is
+    recorded silently (no sound, no `onComplete`) instead of treated as a
+    fresh completion - only a genuine completion *after* that point fires
+    the sound/callback. **Not yet confirmed on device** - re-test by
+    solving a board, zooming out to the wall, then zooming back into that
+    same board, and confirming the fanfare does *not* play again.
+
+26. **Stones and the grid rendered visibly shifted down and slightly out of
+    column alignment from the wall's own grid, throughout the whole time a
+    board was zoomed into** (PR #35) - diagnosed from a video the user sent
+    (no other diagnostic tool available; frames were extracted with
+    `ffmpeg -i <video> -vf fps=4 <dir>/f%03d.png`, since installed via
+    `apt-get install ffmpeg`, then inspected visually). The video showed a
+    constant horizontal seam: everything above it (`WallGridCanvas`, no
+    inset) lined up correctly, everything below it (`BoardScreen`'s own
+    canvas) sat visibly lower. Root cause: `BoardScreen`'s canvas lived
+    inside a `SafeAreaView` with `edges={['top', 'bottom']}`, insetting it
+    by the notch/home-indicator safe area, while the wall's own canvas has
+    no such inset and starts at the screen's true `(0,0)` - since both
+    canvases are driven by the exact same shared `translateX`/`translateY`/
+    `scale`, they only draw the same board at the same screen position if
+    they share that same unshifted origin. Fixed by moving the canvas (and
+    the loading veil) out of the `SafeAreaView` entirely, as a full-screen
+    sibling pinned to the screen's own `(0,0)`, matching the wall exactly -
+    the `SafeAreaView` still wraps the HUD below it (tray, colour picker,
+    progress counter, dev tools), which should stay clear of the notch/home
+    indicator. **Confirmed working on device** - the user confirmed the
+    board now lines up with the wall ("כן הוא מיושר").
+
+27. **The board wall always showed every board as if nothing had ever been
+    placed on it**, even right after zooming back out from one the player
+    had partly or fully solved (PR #36), reported by the user right after
+    confirming item 26's alignment fix ("הוא עדיין מנותק" - stones never
+    felt like a permanent part of the board). Root cause: `WallGridCanvas`
+    baked every board's grid straight from the level's raw cell data, with
+    no read of any board's saved progress at all - the placements were
+    saved for good (`src/game/persistence.ts`, the same store
+    `BoardScreen`'s own session restores from), just never drawn anywhere
+    except inside the live board itself. Fixed with a new
+    `drawBoardStones` (`src/ui/boardGrid.ts`, reuses `drawStone` the same
+    way `BoardCanvas` does) and `WallGridCanvas` now loads every board's
+    saved progress (`loadBoardProgress`, 48 boards per level) alongside its
+    grid, redrawing its baked picture whenever that progress changes. A new
+    `refreshToken` prop, bumped by `UnifiedBoardScreen` whenever
+    `activeBoardId` goes back to `null` (i.e. the player just left a board
+    they were playing), makes the wall reload that board's just-saved
+    progress the moment it's relevant, rather than only on next mount.
+    **Not yet confirmed on device** - re-test by placing a few stones on a
+    board, zooming out to the wall, and confirming those stones are now
+    visible on that board's tile (not just its empty grid).
+
+## On-device checklist for the next session
+
+Everything in items 23-27 just above was written and merged in the same
+remote-container session as items 22-26's own fixes, so **none of items
+25-27 have been tried on a real device at all** (23 and 24 are the only two
+with any device feedback so far - 23 informally, 24 explicitly confirmed).
+Before anything else, walk through:
+
+1. Solve part of a board, zoom out to the wall, zoom back into the *same*
+   board - confirm no fanfare/sound replays (item 25) and confirm the
+   stones you placed are now visible on the wall tile itself once you zoom
+   back out again (item 27).
+2. Fully solve a board you haven't solved before and confirm the sound only
+   plays once, right when it's actually completed.
+3. General regression pass on pinch/pan across the whole `PLAYABLE_SCALE`
+   threshold a few times in a row (in and out, repeatedly, on more than one
+   board) - items 23, 25, 26 and 27 all touched `BoardScreen`'s/
+   `UnifiedBoardScreen`'s mount-unmount and viewport-sharing logic in the
+   same area, so a regression in one could plausibly resurface as a
+   symptom that looks like a different, already-"fixed" bug.
+
 ## Next up
 
 **Start with item 8 below** (the board-level half of the unified wall) —
