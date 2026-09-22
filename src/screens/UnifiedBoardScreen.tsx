@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
@@ -69,6 +69,18 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
   const [activeBoardId, setActiveBoardId] = useState<number | null>(null);
   const insets = useSafeAreaInsets();
   const prepared = preparedLevelFor(levelId);
+
+  // Bumped whenever the player leaves a board they were playing, so
+  // `WallGridCanvas` reloads that board's just-saved progress instead of
+  // going on showing it as it looked before the player zoomed in.
+  const [wallRefreshToken, setWallRefreshToken] = useState(0);
+  const previousActiveBoardId = useRef<number | null>(null);
+  useEffect(() => {
+    if (previousActiveBoardId.current !== null && previousActiveBoardId.current !== activeBoardId) {
+      setWallRefreshToken((token) => token + 1);
+    }
+    previousActiveBoardId.current = activeBoardId;
+  }, [activeBoardId]);
 
   // Reloaded on every focus, not just on mount, so returning from the levels
   // wall (or a progress reset in Settings) shows this wall's current unlock
@@ -247,6 +259,7 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
                 translateX={translateX}
                 translateY={translateY}
                 scale={scale}
+                refreshToken={wallRefreshToken}
               />
             </View>
           ) : null}
