@@ -1,8 +1,9 @@
 import { Skia, type SkCanvas } from '@shopify/react-native-skia';
 
 import { CELL } from '../constants/board';
-import type { BoardData } from '../game/types';
-import { strokePaint } from './drawStone';
+import { cellCol, cellRow } from '../game/geometry';
+import type { BoardData, BoardProgress } from '../game/types';
+import { drawStone, strokePaint } from './drawStone';
 import { numberFont } from './font';
 import { theme } from './theme';
 
@@ -40,5 +41,27 @@ export function drawBoardGrid(canvas: SkCanvas, board: BoardData, originX: numbe
       const textWidth = font.getTextWidth(text);
       canvas.drawText(text, x + (CELL - textWidth) / 2, y + CELL * 0.68, label, font);
     }
+  }
+}
+
+/**
+ * Stones already placed on a board, drawn over its grid at a given offset -
+ * so the board wall (`WallGridCanvas`) can show a board's real progress
+ * instead of always looking freshly empty, which is otherwise the only board
+ * state it ever draws.
+ */
+export function drawBoardStones(
+  canvas: SkCanvas,
+  board: BoardData,
+  originX: number,
+  originY: number,
+  progress: BoardProgress
+): void {
+  for (const placement of progress.placements) {
+    const hex = board.palette[placement.color]?.hex;
+    if (!hex) continue;
+    const row = cellRow(placement.cell, board.width);
+    const col = cellCol(placement.cell, board.width);
+    drawStone(canvas, originX + col * CELL, originY + row * CELL, CELL, hex);
   }
 }
