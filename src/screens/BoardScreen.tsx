@@ -13,7 +13,7 @@ import OnboardingOverlay, { type OnboardingStep } from '../components/Onboarding
 import { DEV_TOOLS_ENABLED } from '../constants/devTools';
 import { resolveDropHead } from '../game/drop';
 import { useBoardSession } from '../hooks/useBoardSession';
-import type { BoardData, Orientation } from '../game/types';
+import type { BoardData, BoardProgress, Orientation } from '../game/types';
 import { hasSeenOnboarding, markOnboardingSeen } from '../storage/onboarding';
 import { rotationPivotShift } from '../ui/airborneRotation';
 import { theme } from '../ui/theme';
@@ -52,6 +52,15 @@ interface Props {
   scale?: SharedValue<number>;
   /** Fired once, the moment every cell of the board gets its stone. */
   onComplete?: () => void;
+  /**
+   * Fired with a synchronous snapshot of this board's progress every time it
+   * changes (and once on load). Lets the unified board wall (`UnifiedBoardScreen`)
+   * keep a live copy of the currently-active board's stones, so leaving it
+   * doesn't have to wait on the debounced AsyncStorage write (and its own
+   * async read back) before the wall can show them - see HANDOFF.md's "stones
+   * disappear on zoom out" fix.
+   */
+  onProgress?: (progress: BoardProgress) => void;
 }
 
 /**
@@ -67,7 +76,16 @@ interface Props {
  * swipe-and-pull on the tray lifts stones into the air, and the airborne
  * stones carry their own drag and tap. Placing never fights with moving.
  */
-export function BoardScreen({ board, originX = 0, originY = 0, translateX, translateY, scale, onComplete }: Props) {
+export function BoardScreen({
+  board,
+  originX = 0,
+  originY = 0,
+  translateX,
+  translateY,
+  scale,
+  onComplete,
+  onProgress,
+}: Props) {
   const ownTranslateX = useSharedValue(0);
   const ownTranslateY = useSharedValue(0);
   const ownScale = useSharedValue(1);
@@ -107,6 +125,12 @@ export function BoardScreen({ board, originX = 0, originY = 0, translateX, trans
     // sounds' identity changes with the settings toggle; only board completion should re-fire this.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, session, revision, onComplete]);
+
+  useEffect(() => {
+    if (!ready) return;
+    onProgress?.(session.toProgress());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, session, revision, onProgress]);
 
   // First-run coach marks. `null` means "still checking storage" so the
   // overlay never flashes on for a returning player while that resolves.

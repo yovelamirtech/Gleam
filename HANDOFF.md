@@ -861,6 +861,71 @@ through together once a device is available rather than repeating
     board, zooming out to the wall, and confirming those stones are now
     visible on that board's tile (not just its empty grid).
 
+28. **A real on-device feedback round after items 20-27 above, five items,
+    all addressed this session:**
+    - **Background music removed.** The user wants to supply their own music
+      later rather than ship the synthesized placeholder loop
+      (`assets/sounds/music.wav`) - `<BackgroundMusic />` is no longer
+      mounted in `App.tsx` (was in the `DevToolsProvider` tree). The
+      component, its settings toggle (`musicEnabled` in `useSettings`), and
+      `tools/sound-gen`'s music generation are all left in place, unused -
+      wiring it back in is a one-line `App.tsx` change once real music
+      exists. Click/row/fanfare sounds and haptics are untouched.
+    - **"Two different things" during a pinch-zoom stutter, and some of the
+      zoom stutter itself.** Root cause: the active board was being drawn
+      *twice*, on two independently-animated Skia canvases at once -
+      `WallGridCanvas` (from that board's last-refreshed stored progress)
+      underneath, and `BoardCanvas` (the live session) on top, both full-
+      screen surfaces driven by the same shared translateX/translateY/scale
+      but composited as two separate GPU draw passes. In steady state they
+      matched and the duplication was invisible; the instant a frame dropped
+      relative to the other, the seam between the two independent layers
+      showed through - exactly "two different things." Fixed with a new
+      `excludeBoardId` prop on `WallGridCanvas` (`src/components/WallGridCanvas.tsx`):
+      while a board is actively playing (`showGameplay` in
+      `UnifiedBoardScreen`), the wall draws a clean hole where that board
+      is - nothing to desync against - and `BoardCanvas` is the only thing
+      ever drawing that board's cells. Also cuts one board's worth of
+      duplicate full-board draw-call work out of every pinch/pan frame,
+      which should help the general stutter too, though **the deeper
+      per-stone draw-call cost (~21 Skia calls/stone, see the "Next up" item
+      8 performance note below) is unchanged and unprofiled on a real
+      device** - if stutter persists after this fix, that's the next lever
+      (dropping `drawStone`'s facet count from 8 to 6 is the plan's own
+      suggested fallback).
+    - **Stones disappearing right when zooming out of a board.** Root cause:
+      leaving a board bumps `wallRefreshToken`, which makes `WallGridCanvas`
+      re-read every board's progress from `AsyncStorage` - but
+      `useBoardSession`'s own write-back is debounced 400ms
+      (`SAVE_DEBOUNCE_MS`), so a stone placed just before zooming out could
+      easily not be on disk yet when that re-read raced it, showing the
+      board briefly (or, on a slow read, not-so-briefly) as if the stone had
+      never been placed. Fixed with a new `onProgress` callback on
+      `BoardScreen` (`src/screens/BoardScreen.tsx`), fired synchronously
+      with `session.toProgress()` on every revision change - no storage
+      round trip. `UnifiedBoardScreen` keeps a plain ref (`liveOverridesRef`,
+      *not* React state - a placement should never re-render the wall) that
+      `WallGridCanvas` now checks before falling back to `loadBoardProgress`
+      for a given board, so the just-departed board's wall tile is correct
+      the instant the hand-off happens, independent of the debounce or the
+      storage read's own latency. Together with the previous fix, this also
+      covers the user's "I need to see the whole picture, even after just
+      one stone" ask - any zoom out past `PLAYABLE_SCALE` now shows that
+      board's true current state on the wall, not last-refresh's state.
+    - **No way back from a board to the levels wall.** `UnifiedBoardScreen`
+      never had an exit control at all - by design, leaving a board was
+      always "just keep pinching out," which turned out not to be
+      discoverable. Added an explicit back button (`testID:
+      "wall-back-button"`) next to the settings gear, calling
+      `navigation.goBack()` - returns to `LevelsScreen`, the screen that
+      always pushes `Boards` on the stack. Pinching out past `PLAYABLE_SCALE`
+      still works exactly as before; the button is just a second, obvious way
+      out.
+    None of this round has been tried on a real device yet - same caveat as
+    every item before it in this file. Typecheck and the full test suite
+    (249 tests, two new in `__tests__/UnifiedBoardScreen.test.tsx` for the
+    back button) are clean.
+
 ## On-device checklist for the next session
 
 Everything in items 23-27 just above was written and merged in the same
@@ -881,6 +946,14 @@ Before anything else, walk through:
    `UnifiedBoardScreen`'s mount-unmount and viewport-sharing logic in the
    same area, so a regression in one could plausibly resurface as a
    symptom that looks like a different, already-"fixed" bug.
+4. Item 28's own fixes, none tried on device yet: confirm no background
+   music plays at all anywhere in the app; pinch-zoom on a board a few times
+   in a row and check whether the stutter is better and whether the board
+   and its stones ever visibly separate/lag apart any more; place one or two
+   stones then immediately zoom out and confirm they're on the wall tile
+   right away (no flash of an empty board); tap the new back button from
+   both the wall and while a board is actively playing and confirm it
+   returns to the levels wall correctly.
 
 ## Next up
 

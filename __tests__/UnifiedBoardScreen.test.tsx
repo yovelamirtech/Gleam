@@ -98,15 +98,16 @@ describe('UnifiedBoardScreen', () => {
     expect(screen.queryByTestId('active-board-overlay')).toBeNull();
   });
 
-  it('leaving via a pinch-out crosses back below PLAYABLE_SCALE instead of a Back button', async () => {
+  it('leaving via a pinch-out crosses back below PLAYABLE_SCALE without touching navigation', async () => {
     await renderWall({ levelId: UNPREPARED_LEVEL_ID, boardId: 28 });
     await waitFor(() => expect(screen.getByTestId('active-board-overlay')).toBeTruthy());
     await waitFor(() => expect(screen.queryByTestId('board-loading')).toBeNull());
 
-    // There is no exit button any more - leaving a board is just continuing
-    // the same pinch gesture the wall itself uses, out past the point where
-    // the board reads as playable. scaleChange this small (from the boardId
-    // shortcut's starting scale of 1) lands well under PLAYABLE_SCALE (0.5).
+    // Leaving a board this way is just continuing the same pinch gesture the
+    // wall itself uses, out past the point where the board reads as
+    // playable - it doesn't need the explicit back button below.
+    // scaleChange this small (from the boardId shortcut's starting scale of
+    // 1) lands well under PLAYABLE_SCALE (0.5).
     await act(async () => {
       fireGestureHandler(getByGestureTestId('board-wall-pinch'), [
         { state: State.BEGAN, focalX: 195, focalY: 400, scale: 1 },
@@ -119,5 +120,11 @@ describe('UnifiedBoardScreen', () => {
     await waitFor(() => expect(screen.queryByTestId('active-board-overlay')).toBeNull());
     expect(navigation.goBack).not.toHaveBeenCalled();
     expect(screen.getByTestId(`board-tile-28`)).toBeTruthy();
+  });
+
+  it('a back button returns to the levels wall without needing to pinch out', async () => {
+    await renderWall();
+    fireEvent.press(screen.getByTestId('wall-back-button'));
+    expect(navigation.goBack).toHaveBeenCalledTimes(1);
   });
 });
