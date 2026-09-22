@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
+import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,7 +12,7 @@ import { WallGridCanvas } from '../components/WallGridCanvas';
 import { BOARDS_PER_LEVEL } from '../constants/board';
 import { preparedLevelFor } from '../game/levels';
 import { createPlaceholderBoard } from '../game/placeholderBoard';
-import type { BoardData } from '../game/types';
+import type { BoardData, BoardProgress } from '../game/types';
 import type { RootStackParamList } from '../navigation/types';
 import {
   boardStatus,
@@ -81,6 +81,22 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
     }
     previousActiveBoardId.current = activeBoardId;
   }, [activeBoardId]);
+
+  // A synchronous, always-current copy of the active board's own progress,
+  // fed by `BoardScreen`'s `onProgress` on every placement - not React state,
+  // so a placement never re-renders the wall. `WallGridCanvas` reads it
+  // instead of a fresh AsyncStorage read the moment the player leaves a
+  // board, since that read can race the session's own debounced write.
+  const liveOverridesRef = useRef<Map<number, BoardProgress>>(new Map());
+  const activeBoardIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    activeBoardIdRef.current = activeBoardId;
+  }, [activeBoardId]);
+  const handleActiveProgress = useCallback((progress: BoardProgress) => {
+    if (activeBoardIdRef.current !== null) {
+      liveOverridesRef.current.set(activeBoardIdRef.current, progress);
+    }
+  }, []);
 
   // Reloaded on every focus, not just on mount, so returning from the levels
   // wall (or a progress reset in Settings) shows this wall's current unlock
@@ -260,6 +276,8 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
                 translateY={translateY}
                 scale={scale}
                 refreshToken={wallRefreshToken}
+                excludeBoardId={showGameplay ? activeBoardId : null}
+                liveOverrides={liveOverridesRef}
               />
             </View>
           ) : null}
@@ -285,7 +303,19 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
       <View style={[styles.header, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
         {/* Left, not right: Expo Go's own floating dev-menu bubble also sits
             in the top-right corner on a real device, and covers ours there. */}
-        <SettingsButton onPress={() => navigation.navigate('Settings')} />
+        <View style={styles.leftButtons}>
+          <Pressable
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Back to levels"
+            testID="wall-back-button"
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={styles.backButton}
+          >
+            <Text style={styles.backIcon}>←</Text>
+          </Pressable>
+          <SettingsButton onPress={() => navigation.navigate('Settings')} />
+        </View>
         <View style={styles.titleBlock}>
           <Text style={[styles.title, styles.textRight]}>{prepared?.name ?? `Level ${levelId + 1}`}</Text>
           <Text style={[styles.subtitle, styles.textRight]}>
@@ -312,6 +342,7 @@ export default function UnifiedBoardScreen({ navigation, route }: Props) {
             translateY={translateY}
             scale={scale}
             onComplete={handleComplete}
+            onProgress={handleActiveProgress}
           />
         </View>
       ) : null}
@@ -359,6 +390,18 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     paddingHorizontal: 16,
   },
+  leftButtons: { flexDirection: 'row', gap: 8 },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  backIcon: { fontSize: 18, color: colors.textMuted },
   titleBlock: { flexShrink: 1 },
   textRight: { textAlign: 'right' },
   title: {

@@ -7,7 +7,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import googleMobileAds from './src/ads/googleMobileAds';
-import { BackgroundMusic } from './src/audio/BackgroundMusic';
 import { FpsOverlay } from './src/components/FpsOverlay';
 import { DEV_TOOLS_ENABLED } from './src/constants/devTools';
 import { DevToolsProvider, useDevTools } from './src/hooks/useDevTools';
@@ -49,7 +48,6 @@ export default function App() {
         <SettingsProvider>
           <PurchasesProvider>
           <DevToolsProvider>
-            <BackgroundMusic />
             <NavigationContainer>
               <Stack.Navigator
                 initialRouteName="Splash"
